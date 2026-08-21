@@ -1460,10 +1460,18 @@ export class CaseStore {
   // `truncated` tells the caller whether more rows existed past `limit` --
   // fetching one sentinel row beyond the cap (limit+1) makes silent truncation
   // observable instead of the caller believing they saw the whole log.
-  async listAllEvents({ kind = null, actor = null } = {}, { limit = 200 } = {}) {
+  //
+  // `caseIds` (optional): restricts the scan to a known set of case ids via
+  // thatcher's operator-where $in (same operator-where compiler listCases
+  // already calls directly, no feature-detect -- see listCases' own comment)
+  // instead of the caller looping listEvents() once per case id. This is what
+  // lets a caller like queueStatus() below replace an O(cases) round-trip
+  // fan-out with exactly one query.
+  async listAllEvents({ kind = null, actor = null, caseIds = null } = {}, { limit = 200 } = {}) {
     const where = {}
     if (kind) where.kind = kind
     if (actor) where.actor = actor
+    if (caseIds) where.case_id = { $in: caseIds }
     const cappedLimit = Math.max(1, limit)
     const rows = byCreatedDescList(await this.t.list('event', where, { limit: cappedLimit + 1 }))
     return { rows: rows.slice(0, cappedLimit), truncated: rows.length > cappedLimit }

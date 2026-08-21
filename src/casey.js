@@ -984,18 +984,45 @@ export class Casey {
   // marker vocabulary) but never drives a turn -- this must be cheap enough to
   // call on every /api/health poll, so it is capped the same way (maxCases)
   // and never touches _draining (a concurrent real drain is unaffected).
+  // Single cross-case query (thatcher's case_id $in, via listAllEvents) instead
+  // of a listCases + one listEvents-per-case fan-out -- the fan-out was a real
+  // measured N+1 (up to 1+maxCases round trips per call; this route is polled
+  // on every /api/health and /api/health/provider read, so the redundant cost
+  // was paid on every poll, not just once). Grouping the flat cross-case result
+  // by case_id in JS below reproduces the exact same per-case, in-order marker
+  // scan the old per-case loop did -- completedAfter is still evaluated only
+  // against events within the SAME case, in the same created_at/insertion
+  // order, so the queued/dead/pending classification is unchanged, just
+  // computed from one round trip instead of many. Still a live read every call
+  // (no caching) -- only the number of queries changed, not what is read.
   async queueStatus({ maxCases = 200 } = {}) {
     let pending = 0, deadLettered = 0, truncated = false
     try {
-      const rows = await this.store.listCases({}, { limit: maxCases, offset: 0 })
+      const caseRows = await this.store.listCases({}, { limit: maxCases, offset: 0 })
       // rows are last_event_at DESC, so hitting the cap means a case that went
       // quiet after being queued (once maxCases other cases had newer activity)
       // silently fell out of this scan -- surface that instead of reporting an
       // undisclosed undercount, same discipline countCases() already documents.
-      if (rows.length >= maxCases) truncated = true
-      for (const c of rows) {
-        let events
-        try { events = await this.store.listEvents(c.id) } catch { continue }
+      if (caseRows.length >= maxCases) truncated = true
+      if (!caseRows.length) return { pending, deadLettered, truncated }
+      const caseIds = caseRows.map(c => c.id)
+      // Only the 4 event kinds the marker scan below ever inspects -- narrows
+      // the single cross-case query instead of pulling every event kind for
+      // every case (transitions, autonomy_change, etc. are never read here).
+      const { rows: allEvents } = await this.store.listAllEvents(
+        { caseIds, kind: { $in: ['inbound', 'outbound', 'draft', 'observation'] } },
+        { limit: caseIds.length * 200 },
+      )
+      const byCase = new Map()
+      for (const ev of allEvents) {
+        if (!byCase.has(ev.case_id)) byCase.set(ev.case_id, [])
+        byCase.get(ev.case_id).push(ev)
+      }
+      for (const events of byCase.values()) {
+        // allEvents is newest-first (listAllEvents' own contract); the marker
+        // scan below depends on oldest-first order within a case (a queued
+        // marker must be seen before the outbound/draft that completes it).
+        events.sort((a, b) => Number(a.created_at) - Number(b.created_at))
         const queued = new Map()
         const completedAfter = new Set()
         const dead = new Set()
