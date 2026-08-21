@@ -86,7 +86,12 @@ export function HandoffBanner() {
   if (!q.length) return null;
   const c = q[q.length - 1];
   const extra = q.length > 1 ? (' (and ' + (q.length - 1) + ' more)') : '';
-  return h('div', { class: 'ds-handoff-banner', id: 'handoff', onclick: () => openCaseRoute(c.id) },
+  return h('div', {
+    class: 'ds-handoff-banner', id: 'handoff', tabindex: '0', role: 'button',
+    'aria-label': 'Open case ' + (c.ref || '') + ' - someone needs a person',
+    onclick: () => openCaseRoute(c.id),
+    onkeydown: (ev) => { if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); openCaseRoute(c.id); } },
+  },
     Alert({
       kind: 'warn',
       title: 'Someone needs a person',

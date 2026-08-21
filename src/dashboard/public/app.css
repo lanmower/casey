@@ -306,6 +306,7 @@ body { background: var(--bg); color: var(--fg); }
 }
 .ds-handoff-banner .ds-alert-warn .ds-alert-icon { color: var(--warn, var(--amber)); }
 .ds-handoff-banner-hide { flex-shrink: 0; }
+.ds-handoff-banner:focus-visible { outline: 2px solid var(--focus-color, var(--accent)); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .ds-handoff-banner { animation: none; } }
 @keyframes ds-handoff-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .85; } }
 

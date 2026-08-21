@@ -1528,7 +1528,6 @@ export class CaseStore {
         attemptBefore = fresh
       }
     }
-    const result = await this.getCase(caseId)
     // attemptBefore.status is the TRUE prior stage the write actually
     // overwrote -- on a conflict retry this is the freshly re-read status,
     // not the original (possibly now-stale) `before` snapshot, so the audit
@@ -1539,6 +1538,19 @@ export class CaseStore {
       text: `${attemptBefore.status} -> ${toState}${reason ? ` (${reason})` : ''}`,
       data: { from: attemptBefore.status, to: toState, by: user.id, reason },
     })
+    // Re-read AFTER appendEvent, not before: appendEvent's own touch write
+    // (last_event_at, touch=true by default) is a SECOND mutation of this same
+    // case row, bumping its optimistic-lock version again. Reading `result`
+    // before that touch landed (the previous ordering) returned a snapshot
+    // whose _version was already one behind the row's true state the instant
+    // transition() returned -- a caller that trusted this return value as
+    // "current" and reused its _version as their own next expectedVersion hit
+    // a spurious conflict against a write that was never actually concurrent.
+    // Thatcher's optimistic lock itself never let that stale version corrupt
+    // data (a mismatched expectedVersion always throws), but it broke the
+    // idempotent-dispatch-replay-safe property: the returned row must reflect
+    // every mutation transition() itself performed, not just the first of two.
+    const result = await this.getCase(caseId)
     // Proactive contact note. Isolated: a notify failure must not fail the
     // operator's transition (the stage change already committed).
     if (this.onTransition) {
