@@ -46,13 +46,18 @@ export async function writeObservation(rawLog, params, { nowFn = () => Date.now(
     // the rejected fields back so it can decide (e.g. keep asking the
     // worker, or record the new value as a disputed correction with an
     // explicit correctsId + reason instead).
+    // latestByField stores { val, reportedAt } wrapper objects -- a
+    // provenanced value carries recordedAt, not reportedAt, so comparing
+    // existing.reportedAt against a bare value would compare against
+    // undefined forever after the first write to a field. Mirrors
+    // redactSubjectFields's own wrapper shape below.
     const prior = rawLog.bySubject(subjectId)
     const latestByField = new Map()
     for (const obs of prior) {
       for (const [field, val] of Object.entries(obs.findings || {})) {
         const existing = latestByField.get(field)
         if (!existing || Date.parse(obs.reportedAt) >= Date.parse(existing.reportedAt)) {
-          latestByField.set(field, val)
+          latestByField.set(field, { val, reportedAt: obs.reportedAt })
         }
       }
     }
@@ -60,7 +65,7 @@ export async function writeObservation(rawLog, params, { nowFn = () => Date.now(
     const acceptedFindings = {}
     for (const [field, incoming] of Object.entries(params.findings || {})) {
       requireProvenance(incoming, `findings.${field}`)
-      const currentTop = latestByField.get(field)
+      const currentTop = latestByField.get(field)?.val
       if (currentTop && !canReplace(currentTop, incoming)) {
         rejectedFields.push({ field, reason: `incoming provenance "${incoming.provenance}" cannot overwrite existing "${currentTop.provenance}"`, current: currentTop, incoming })
         continue
