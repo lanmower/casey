@@ -54,14 +54,20 @@ const CHANNEL_DEFAULT = { whatsapp: 'whatsapp', discord: 'discord', sim: 'sim' }
 // CASEY_TURN_HARD_DEADLINE_MS is the real, unconditional guarantee: the
 // attempt loop below spends AT MOST this much total wall-clock time retrying
 // (each individual attempt still gets to run its own bounded provider-chain
-// walk -- acptoapi's own 20s-per-hop DEFAULT_LINK_TIMEOUT_MS -- to real
-// completion rather than being cut off mid-hop; this is the "completing
-// through multiple samples" behavior the design calls for: a retry that
-// starts with real remaining budget gets a genuine chance, not an
-// arbitrarily truncated one). Once the hard deadline is reached the loop
-// stops retrying and the guaranteed-fallback text is composed and sent --
-// see the attempt loop's own remainingMs calculation for exactly how each
-// attempt's budget is derived.
+// walk -- ACPTOAPI_CHAIN_LINK_TIMEOUT_MS-per-hop, set to 60s in casey's own
+// .env -- to real completion rather than being cut off mid-hop; this is the
+// "completing through multiple samples" behavior the design calls for: a
+// retry that starts with real remaining budget gets a genuine chance, not an
+// arbitrarily truncated one). acptoapi's OWN shipped default for this
+// timeout (chain-machine.js DEFAULT_LINK_TIMEOUT_MS) is 120s, not 20s -- a
+// stale claim this comment used to make; casey's .env explicitly overrides
+// it to 60s specifically because the upstream default alone would let one
+// bad chain hop consume the whole hard-deadline budget on attempt 1 alone.
+// A deployment missing that .env override silently inherits the wider 120s
+// default (see AGENTS.md's Timeout Coordination section). Once the hard
+// deadline is reached the loop stops retrying and the guaranteed-fallback
+// text is composed and sent -- see the attempt loop's own remainingMs
+// calculation for exactly how each attempt's budget is derived.
 //
 // CASEY_TURN_SOFT_DEADLINE_MS is NOT a second timeout gate -- it only picks
 // which of the two fallback strings to send, based on how long the whole
@@ -781,9 +787,12 @@ export function makeCaseHandler(store, { callLLM = null, llmStatus = null, autoR
     // (TURN-START, just recorded above) anchors a remaining-budget calculation
     // for EACH attempt, so a multi-attempt retry loop can never exceed
     // TURN_HARD_DEADLINE_MS in total even though each individual attempt still
-    // gets to run its own bounded chain walk (acptoapi's own 20s per-hop
-    // timeout -- see chain-machine.js's DEFAULT_LINK_TIMEOUT_MS) to
-    // completion rather than being cut off mid-hop. This is the "completing
+    // gets to run its own bounded chain walk (ACPTOAPI_CHAIN_LINK_TIMEOUT_MS
+    // per-hop -- 60s via casey's own .env override; acptoapi's shipped
+    // DEFAULT_LINK_TIMEOUT_MS in chain-machine.js is 120s, not 20s, so an
+    // unoverridden deployment gets a much wider per-hop budget than this
+    // comment used to claim -- see AGENTS.md's Timeout Coordination section)
+    // to completion rather than being cut off mid-hop. This is the "completing
     // through multiple samples" behavior: a retry attempt that starts with
     // real remaining budget gets a REAL chance, not an arbitrarily truncated
     // one -- only once the hard deadline is genuinely exhausted does the next

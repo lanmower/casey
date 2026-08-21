@@ -207,6 +207,50 @@ async function main() {
         problems++
       }
     }
+    // Timeout coordination (AGENTS.md's "Timeout Coordination" section): the
+    // per-attempt LLM turn budget must comfortably exceed the per-provider
+    // chain-link timeout, or a single unhealthy provider hop can consume an
+    // entire attempt's budget and starve hooks/handler.js's retry loop of
+    // any real remaining time. This is not read from casey's own prose --
+    // acptoapi is a floating github:AnEntrypoint/acptoapi#main dependency
+    // with no version pin, so its shipped DEFAULT_LINK_TIMEOUT_MS can drift
+    // out from under casey on any npm install with no casey-side commit; a
+    // hardcoded assumption here would go stale exactly the way AGENTS.md's
+    // own prose already did (its documented 20s default drifted to the
+    // installed package's real 120s default with nothing to catch it). Read
+    // the LIVE resolved value the same way the library itself resolves it:
+    // explicit env var, else the installed chain-machine.js's own coded
+    // fallback, parsed directly from its source rather than re-guessed here.
+    {
+      const attemptMs = Number(process.env.CASEY_LLM_TURN_TIMEOUT_MS) || 120000
+      const hardDeadlineMs = Number(process.env.CASEY_TURN_HARD_DEADLINE_MS) || 120000
+      let linkMs = Number(process.env.ACPTOAPI_CHAIN_LINK_TIMEOUT_MS)
+      let linkSource = 'ACPTOAPI_CHAIN_LINK_TIMEOUT_MS env'
+      if (!linkMs) {
+        try {
+          const chainMachineSrc = readFileSync(path.join(ROOT, 'node_modules', 'acptoapi', 'lib', 'chain-machine.js'), 'utf8')
+          const m = chainMachineSrc.match(/DEFAULT_LINK_TIMEOUT_MS\s*=\s*Number\(process\.env\.ACPTOAPI_CHAIN_LINK_TIMEOUT_MS\)\s*\|\|\s*(\d+)/)
+          linkMs = m ? Number(m[1]) : null
+          linkSource = m ? `acptoapi's installed default (chain-machine.js)` : null
+        } catch { linkMs = null; linkSource = null }
+      }
+      if (linkMs == null) {
+        console.log(warn('timeout coordination: could not resolve ACPTOAPI_CHAIN_LINK_TIMEOUT_MS (acptoapi not installed yet?) - skipping check'))
+      } else {
+        // "Comfortably below": a single link timeout should leave room for at
+        // least 2 hops within one attempt, matching the "full chain walk
+        // completes per attempt" constraint AGENTS.md documents.
+        const budget = Math.min(attemptMs, hardDeadlineMs)
+        if (linkMs >= budget) {
+          console.log(bad(`timeout coordination: ACPTOAPI_CHAIN_LINK_TIMEOUT_MS=${linkMs}ms (${linkSource}) >= per-attempt budget ${budget}ms - a single unhealthy provider hop can consume an entire attempt, starving the retry loop; set ACPTOAPI_CHAIN_LINK_TIMEOUT_MS in .env well below CASEY_LLM_TURN_TIMEOUT_MS/CASEY_TURN_HARD_DEADLINE_MS`))
+          problems++
+        } else if (linkMs * 2 >= budget) {
+          console.log(warn(`timeout coordination: ACPTOAPI_CHAIN_LINK_TIMEOUT_MS=${linkMs}ms (${linkSource}) leaves room for at most 1 unhealthy hop within the ${budget}ms per-attempt budget - a chain walking 2+ bad providers in one attempt will exhaust it`))
+        } else {
+          console.log(ok(`timeout coordination: ACPTOAPI_CHAIN_LINK_TIMEOUT_MS=${linkMs}ms (${linkSource}) leaves room for multiple hops within the ${budget}ms per-attempt budget`))
+        }
+      }
+    }
     // channels
     for (const ch of ['discord', 'whatsapp']) {
       if (hasCreds(ch)) console.log(ok(`channel ${ch}: credentials present`))

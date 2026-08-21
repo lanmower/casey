@@ -286,7 +286,21 @@ The timeout stack is four independent layers. Each layer has its own deadline; a
 - Guarantees: Every live turn ends with either a real reply OR a truthful status message sent to the contact
 
 **Layer 2: Provider chain link (acptoapi)**
-- `ACPTOAPI_CHAIN_LINK_TIMEOUT_MS` (default 20000 / 20 sec): Per-provider timeout for each hop through the ranked candidate list
+- `ACPTOAPI_CHAIN_LINK_TIMEOUT_MS`: Per-provider timeout for each hop through the ranked candidate list.
+  acptoapi's own shipped default (`node_modules/acptoapi/lib/chain-machine.js`'s
+  `DEFAULT_LINK_TIMEOUT_MS`) is **120000 / 120 sec** -- NOT 20s; this drifted
+  upstream from an earlier 20s default this doc used to document, and because
+  acptoapi is consumed via a floating `github:AnEntrypoint/acptoapi#main` npm
+  spec with no version pin (see Architecture), casey's own `npm install` picks
+  up whatever default that repo's `main` currently ships with no casey-side
+  commit required. At the shipped default, a SINGLE unhealthy provider hop can
+  consume the entire per-attempt/hard-deadline budget, leaving zero room for
+  `hooks/handler.js`'s `MAX_TOOL_CHOICE_ATTEMPTS` retry loop -- this is why
+  casey's own `.env` sets `ACPTOAPI_CHAIN_LINK_TIMEOUT_MS=60000` explicitly
+  rather than trusting the upstream default; a fresh deployment with no
+  explicit override inherits the wider 120s default silently. `casey doctor`
+  flags a per-link timeout that is not comfortably below the per-attempt
+  budget (see its own check).
 - Applies to: Each provider in the auto-chain walk, once per attempt
 - Constraint: Each attempt calls the full chain to completion, not truncated mid-hop; only the hard deadline stops retries
 
@@ -301,9 +315,18 @@ The timeout stack is four independent layers. Each layer has its own deadline; a
 ```
 Hard deadline (120s) >= Soft deadline (25s) [x]        -- tone changes partway through wait
 Hard deadline >= Per-attempt timeout (120s) [x]       -- retries fit within hard budget
-Per-attempt >= Per-link timeout (20s) [x]             -- full chain walk completes per attempt
+Per-attempt >= Per-link timeout (.env: 60s) [x]       -- full chain walk completes per attempt
+                                                          (acptoapi's OWN shipped default is
+                                                          120s, equal to the per-attempt budget --
+                                                          casey's .env explicitly overrides to 60s;
+                                                          without that override this row FAILS)
 Per-link >= Readiness/discovery timeouts [x]          -- inner probes complete before outer
-Chain-link (20s) * max retries (3) + buffer            -- allows multiple complete chain walks
+Chain-link (.env: 60s) * max retries (3) + buffer       -- with the .env override, up to 3
+                                                          attempts still cannot each complete a
+                                                          multi-hop chain walk inside the 120s
+                                                          hard deadline if more than one hop is
+                                                          unhealthy; a single bad hop can still
+                                                          consume most of one attempt's budget
 ```
 
 **Typical healthy turn timeline:**

@@ -98,53 +98,48 @@ export function registerOperations(app, deps) {
     res.json({ ...view, source: s.source, model, url, degraded: !!s.degraded, last_turn_ms: Number.isFinite(s.lastMs) ? s.lastMs : null, gateway, queue, alert_webhook: alertWebhook, degradation_rate: degradationRate })
   }))
 
-  // Detailed provider health: current status, timestamps, queue depth, chain position.
-  // More granular than /api/health's pill; used by monitoring/debugging.
+  // Detailed provider health: current status, completion-path latency, queue
+  // depth. More granular than /api/health's pill; used by monitoring/debugging.
   // Aggregate-only (no case refs, no contact data), visible to any authed operator.
+  //
+  // Both fields come from real, live call sites, never a cached/hoped-for
+  // shape: `llmStatus` is makeResilientCallLLM().status (llm.js) -- its actual
+  // return shape is {source, model, url, degraded, lastMs, recentSlow, ok},
+  // not a separate ProviderHealthTracker with lastSuccessAt/queuedTurnCount/
+  // currentChainPosition fields; no real backend has ever populated those, so
+  // reading them here always fell through to a fallback with the same fields
+  // hardcoded to null/0 -- a permanently-dead branch that only looked
+  // detailed. `queueStatus` (casey.queueStatus(), wired the same way
+  // /api/health's own pill already reads it) is where a genuine live pending/
+  // dead-lettered count actually lives.
   app.get('/api/health/provider', wrap(async (req, res) => {
     if (!authed(req)) return res.status(401).json({ error: 'unauthorized' })
-    let providerStatus = {}
+    let s = null
+    try { s = typeof llmStatus === 'function' ? await llmStatus() : llmStatus } catch { s = null }
+    s = s || { source: 'unknown' }
+    const status = s.source === 'acptoapi' ? (s.degraded ? 'degraded' : 'up') : (s.source === 'none' ? 'down' : 'unknown')
+    let queued_turn_count = 0
+    let dead_lettered_count = 0
+    let queue_truncated = false
     try {
-      if (typeof llmStatus === 'function') {
-        const s = await llmStatus()
-        if (s && s.status) {
-          // Full snapshot from ProviderHealthTracker if available
-          providerStatus = {
-            status: s.status,
-            last_success_at: s.lastSuccessAt || null,
-            last_failure_at: s.lastFailureAt || null,
-            last_failure_error: s.lastFailureError || null,
-            queued_turn_count: Number.isFinite(s.queuedTurnCount) ? s.queuedTurnCount : 0,
-            dead_lettered_count: Number.isFinite(s.deadLetteredCount) ? s.deadLetteredCount : 0,
-            current_chain_position: s.currentChainPosition || null,
-            up_since: s.upSince || null,
-          }
-        }
+      const qs = typeof queueStatus === 'function' ? await queueStatus() : null
+      if (qs) {
+        queued_turn_count = Number.isFinite(qs.pending) ? qs.pending : 0
+        dead_lettered_count = Number.isFinite(qs.deadLettered) ? qs.deadLettered : 0
+        queue_truncated = !!qs.truncated
       }
     } catch { /* best-effort; never break health */ }
-    // Fallback to old-style simple status if tracker not available
-    if (!providerStatus.status) {
-      let s = typeof llmStatus === 'function' ? await llmStatus() : llmStatus
-      s = s || { source: 'unknown' }
-      providerStatus = {
-        status: s.source === 'acptoapi' ? (s.degraded ? 'degraded' : 'up') : (s.source === 'none' ? 'down' : 'unknown'),
-        last_success_at: null,
-        last_failure_at: null,
-        last_failure_error: null,
-        queued_turn_count: 0,
-        dead_lettered_count: 0,
-        current_chain_position: null,
-        up_since: null,
-      }
-    }
-    // Bound strings so a corrupted tracker cannot inject markup
-    if (providerStatus.last_failure_error) {
-      providerStatus.last_failure_error = String(providerStatus.last_failure_error).slice(0, 500)
-    }
-    if (providerStatus.current_chain_position) {
-      providerStatus.current_chain_position = String(providerStatus.current_chain_position).slice(0, 100)
-    }
-    res.json(providerStatus)
+    res.json({
+      status,
+      source: s.source || 'unknown',
+      model: s.model ? String(s.model).slice(0, 100) : null,
+      degraded: !!s.degraded,
+      last_turn_ms: Number.isFinite(s.lastMs) ? s.lastMs : null,
+      recent_slow_count: Number.isFinite(s.recentSlow) ? s.recentSlow : 0,
+      queued_turn_count,
+      dead_lettered_count,
+      queue_truncated,
+    })
   }))
 
   // Case-level health signals from the periodic guardrail sweep: which cases are
@@ -164,15 +159,33 @@ export function registerOperations(app, deps) {
     // Scan all open cases for current health status
     const openCases = (await store.listCases({}, { limit: 10000 }))
       .filter(c => c.status !== 'closed' && c.channel !== 'system')
-    // Compute live breaches per case (not cached tags, which lag the real state)
+    // Compute live breaches per case (not cached tags, which lag the real state).
+    // assignee is the case's owning operator (same field /api/attention already
+    // surfaces) so a breaching case can be attributed to who is on the hook for
+    // it, not just listed flat -- an empty string means unassigned, never PII
+    // (assignee is an operator username, not a contact identifier).
     const cases = openCases.map(c => ({
       id: c.id,
       ref: c.ref,
       status: c.status,
       tags: tagList(c).join(','),
+      assignee: c.assignee || '',
       breaches: classifyCaseHealth(c, now, thresholds),
       updated_at: c.updated_at || c.created_at,
     })).filter(c => c.breaches.length > 0)  // only show cases with active breaches
+    // Per-operator rollup: how many breaching cases each operator (or the
+    // unassigned pool) is currently on the hook for, worst-breach-count first --
+    // the PRD's own "case-level health signals per operator" requirement, not
+    // just a flat list an operator must self-filter by eye.
+    const byOperatorMap = new Map()
+    for (const c of cases) {
+      const key = c.assignee || 'unassigned'
+      if (!byOperatorMap.has(key)) byOperatorMap.set(key, { operator: key, case_count: 0, breach_count: 0 })
+      const entry = byOperatorMap.get(key)
+      entry.case_count += 1
+      entry.breach_count += c.breaches.length
+    }
+    const byOperator = [...byOperatorMap.values()].sort((a, b) => b.breach_count - a.breach_count)
     // Sweep status: last run time, interval, and aggregate summary
     let sweepStatus = {
       ok: true,
@@ -217,6 +230,7 @@ export function registerOperations(app, deps) {
       sweep: sweepStatus,
       case_count: healthCaseCount,
       cases,
+      by_operator: byOperator,
     })
   }))
 

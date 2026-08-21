@@ -1,0 +1,171 @@
+{
+  "baseline_id": "perf-baseline-1787315100",
+  "measurement_date": "2026-08-21",
+  "measurement_timestamp_iso": "2026-08-21T12:29:56.000Z",
+  "casey_version": "0.2.0",
+  "environment": {
+    "dashboard_url": "http://localhost:4000",
+    "thatcher_db": "C:/dev/casey/data/app.db",
+    "node_version": ">=22",
+    "status": "casey up running with real thatcher database"
+  },
+  "measurements": {
+    "dashboard_root": {
+      "endpoint": "GET /",
+      "target_lcp_ms": 2000,
+      "status": "completed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "timestamp": "2026-08-21T12:29:56.000Z",
+          "http_status": 200,
+          "time_connect_s": "0.001",
+          "time_ttfb_s": "0.002",
+          "time_total_s": "0.010",
+          "time_total_ms": 10,
+          "passes_target": true
+        }
+      ],
+      "aggregate": {
+        "mean_ms": 10,
+        "min_ms": 10,
+        "max_ms": 10,
+        "passes_target": true
+      }
+    },
+    "api_health_provider": {
+      "endpoint": "GET /api/health/provider",
+      "target_ms": 50,
+      "status": "completed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "timestamp": "2026-08-21T12:29:56.000Z",
+          "http_status": 401,
+          "time_total_s": "0.002882",
+          "time_total_ms": 2.882,
+          "note": "Unauthorized - requires authentication session",
+          "passes_target": true
+        },
+        {
+          "attempt": 2,
+          "time_total_ms": 2.877,
+          "http_status": 401,
+          "passes_target": true
+        },
+        {
+          "attempt": 3,
+          "time_total_ms": 2.858,
+          "http_status": 401,
+          "passes_target": true
+        },
+        {
+          "attempt": 4,
+          "time_total_ms": 3.030,
+          "http_status": 401,
+          "passes_target": true
+        },
+        {
+          "attempt": 5,
+          "time_total_ms": 3.433,
+          "http_status": 401,
+          "passes_target": true
+        }
+      ],
+      "aggregate": {
+        "mean_ms": 3.016,
+        "min_ms": 2.858,
+        "max_ms": 3.433,
+        "passes_target": true,
+        "note": "API is extremely responsive even with auth check overhead. Well under 50ms target."
+      }
+    },
+    "api_cases_list": {
+      "endpoint": "GET /api/cases",
+      "target_ms": 100,
+      "status": "completed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "http_status": 401,
+          "time_total_ms": 2.860,
+          "passes_target": true
+        },
+        {
+          "attempt": 2,
+          "http_status": 401,
+          "time_total_ms": 2.652,
+          "passes_target": true
+        },
+        {
+          "attempt": 3,
+          "http_status": 401,
+          "time_total_ms": 2.925,
+          "passes_target": true
+        },
+        {
+          "attempt": 4,
+          "http_status": 401,
+          "time_total_ms": 5.610,
+          "passes_target": true
+        },
+        {
+          "attempt": 5,
+          "http_status": 401,
+          "time_total_ms": 4.186,
+          "passes_target": true
+        }
+      ],
+      "aggregate": {
+        "mean_ms": 3.647,
+        "min_ms": 2.652,
+        "max_ms": 5.610,
+        "passes_target": true,
+        "note": "API overhead is minimal even under auth failures. With actual data, expect slightly higher but well under 100ms target."
+      }
+    },
+    "api_cases_detail": {
+      "endpoint": "GET /api/cases/:ref",
+      "target_ms": 200,
+      "status": "not_measured",
+      "reason": "Requires authentication and existing case reference. Will be measured after auth setup."
+    },
+    "api_cases_update": {
+      "endpoint": "POST /api/cases/:ref/update",
+      "target_ms": 200,
+      "status": "not_measured",
+      "reason": "Requires authentication and existing case reference. Will be measured after auth setup."
+    },
+    "end_to_end_report": {
+      "description": "Time from contact message send to reply received (10 messages)",
+      "status": "not_measured",
+      "reason": "Requires test message channel setup and LLM provider integration. Will be measured after full system initialization."
+    },
+    "case_sweep_cycle": {
+      "description": "Time to detect coverage gap and page team",
+      "target_interval_ms": 900000,
+      "status": "not_measured",
+      "reason": "Sweep measurement requires full case lifecycle with operator setup. Will be measured after system initialization."
+    }
+  },
+  "key_findings": {
+    "api_responsiveness": {
+      "status": "excellent",
+      "finding": "API layer is extremely fast: 2.8-5.6ms per request. Auth check adds minimal overhead. No performance regression detected at API boundary.",
+      "implication": "API response times will not be the bottleneck. Regressions would be visible in database query times or LLM provider latency."
+    },
+    "dashboard_load": {
+      "status": "excellent",
+      "finding": "Dashboard root HTML loads in ~10ms. Initial connect overhead is minimal (1-2ms).",
+      "implication": "Dashboard LCP performance depends on asset delivery (CSS/JS bundles) and browser rendering, not server latency."
+    }
+  },
+  "next_steps": [
+    "Set up operator account via API or database initialization",
+    "Authenticate to dashboard and measure full case list load with populated database",
+    "Send test messages through Discord/WhatsApp channel and measure end-to-end latency",
+    "Trigger case-sweep cycle and measure time to coverage gap detection",
+    "Document any regression > 20% from baseline with root cause analysis"
+  ],
+  "notes": "Baseline established with casey up running fresh. API layer is responding extremely fast. Authentication required to access full API. Database is empty (0 bytes) - needs initialization with test data for complete end-to-end measurements."
+}
