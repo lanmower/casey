@@ -839,28 +839,53 @@ export class Casey {
     if (this._draining) return { scanned: 0, drained: 0, deferred: true }
     const handle = this.gateway?.handleInbound
     if (typeof handle !== 'function') return { scanned: 0, drained: 0 }
-    // (a) hard status gate -- only drain when the backend is actually back. Falls
-    // back to opts.llmStatus / callLLM.status when resilientStatus was not wired
-    // (e.g. an embedded/test Casey built via createCasey without a worker shell).
-    try {
-      const statusFn = this.resilientStatus
-        || this.opts.llmStatus
-        || (typeof this.opts.callLLM?.status === 'function' ? this.opts.callLLM.status.bind(this.opts.callLLM) : null)
-      const st = statusFn ? await statusFn() : null
-      if (st && st.ok === false) {
-        // Same "always log the outcome" discipline as the post-scan completion
-        // log below -- this early bail is the MOST common outcome of a routine
-        // drain-poll tick (the backend is still down between recovery windows)
-        // and was previously silent, making it indistinguishable from the timer
-        // never having fired at all. Live-witnessed needing this while
-        // verifying the drain-poll fix itself.
-        this.log?.info?.('[casey] queue drain skipped (backend degraded)', { source: st.source, degraded: st.degraded })
-        return { scanned: 0, drained: 0, degraded: true }
-      }
-    } catch { /* if status is unavailable, fall through and let the turn throw-guard handle it */ }
+    // Claim the shared guard SYNCHRONOUSLY, immediately after the check above and
+    // before the first await below -- Set-less equivalent of the same
+    // check-then-act atomicity hooks/handler.js's inFlight.has+inFlight.add
+    // documents for its own per-contact claim. The guard used to be set only
+    // AFTER the status-probe `await statusFn()` below, leaving a real TOCTOU
+    // window: two concurrent drainQueuedTurns() calls (the periodic drain-poll
+    // tick racing an LLM-recovery onRecover edge, or two recovery edges firing
+    // close together) could both pass the `if (this._draining)` check before
+    // either had reached the point of setting it, both entering the scan/redrive
+    // body at once -- exactly the double-drive this guard's own comment (and
+    // resumePendingTurns' sibling comment two callers up) claims is prevented.
+    // Live-witnessed: the pre-fix shape let 3/3 concurrent calls enter the
+    // critical section simultaneously. Every exit path below (including the
+    // degraded-status early return, which now happens AFTER the claim) is
+    // covered by the trailing finally that resets _draining, so the guard is
+    // never left stuck true on a thrown/early-returned path.
     this._draining = true
-    let scanned = 0, drained = 0
     try {
+      // (a) hard status gate -- only drain when the backend is actually back. Falls
+      // back to opts.llmStatus / callLLM.status when resilientStatus was not wired
+      // (e.g. an embedded/test Casey built via createCasey without a worker shell).
+      try {
+        const statusFn = this.resilientStatus
+          || this.opts.llmStatus
+          || (typeof this.opts.callLLM?.status === 'function' ? this.opts.callLLM.status.bind(this.opts.callLLM) : null)
+        const st = statusFn ? await statusFn() : null
+        if (st && st.ok === false) {
+          // Same "always log the outcome" discipline as the post-scan completion
+          // log below -- this early bail is the MOST common outcome of a routine
+          // drain-poll tick (the backend is still down between recovery windows)
+          // and was previously silent, making it indistinguishable from the timer
+          // never having fired at all. Live-witnessed needing this while
+          // verifying the drain-poll fix itself.
+          this.log?.info?.('[casey] queue drain skipped (backend degraded)', { source: st.source, degraded: st.degraded })
+          return { scanned: 0, drained: 0, degraded: true }
+        }
+      } catch { /* if status is unavailable, fall through and let the turn throw-guard handle it */ }
+      return await this._drainQueuedTurnsBody({ maxCases, maxRedrives, retryCap })
+    } finally {
+      this._draining = false
+    }
+  }
+
+  async _drainQueuedTurnsBody({ maxCases, maxRedrives, retryCap }) {
+    const handle = this.gateway?.handleInbound
+    let scanned = 0, drained = 0
+    {
       const openStatuses = new Set(this.store.getOpenStatuses?.() || [])
       const rows = await this.store.listCases({}, { limit: maxCases, offset: 0 })
       for (const c of rows) {
@@ -971,8 +996,6 @@ export class Casey {
       // from "the timer never fired" and "the timer fired but found nothing".
       this.log?.info?.('[casey] queue drain complete', { scanned, drained })
       return { scanned, drained }
-    } finally {
-      this._draining = false
     }
   }
 
