@@ -9,6 +9,7 @@
 import { getCaseStore } from './case-runtime.js'
 import { AGENT_USER, REPORT_KEYS } from './case-store.js'
 import { REPORT_FIELD_DEFS, REPORT_GEO_FIELD_DEFS, REPORT_TOOL_NAME, REPORT_TOOL_DESCRIPTION, NEVER_INFERRED_FIELDS, ENQUIRY_HEADLINE_FIELDS } from './store/report-shape.js'
+import { readThatcherFieldEnum } from './config-loader.js'
 import { normalizeLocation } from './location-normalize.js'
 import { recordProvenanceObservation } from './provenance-wire.js'
 import { mergeTag, OPTED_OUT_TAG } from './hooks/heuristics.js'
@@ -24,15 +25,23 @@ const str = (description, extra = {}) => ({ type: 'string', description, ...extr
 function defTool(name, toolset, description, parameters, handler) {
   return { name, toolset, schema: { name, description, parameters }, handler }
 }
-// Shipped defaults -- used for the tool-schema `enum` hint shown to the model
-// (built once at plugin-load time, before a store necessarily exists, so it
-// cannot read live config) AND as the fallback when a config has no case_type/
-// priority enum declared. The actual WRITE-TIME validation below reads the
-// live config-declared enum via store().getFieldEnum(), so a deployment that
-// adds/renames a case_type or priority value in thatcher.config.yml is
-// enforced correctly even though the schema hint still shows the shipped list.
-const DEFAULT_CASE_TYPE_VALUES = ['unset', 'outbreak', 'follow_up', 'lab_sample', 'import_alert']
-const DEFAULT_PRIORITY_VALUES = ['low', 'normal', 'high', 'urgent']
+// Tool-schema `enum` hint shown to the model (built once at plugin-load
+// time, before a store necessarily exists, so it cannot call the live
+// store's own getFieldEnum() -- see below). Read synchronously from the
+// active thatcher.config.yml via config-loader.js's readThatcherFieldEnum
+// (same CASEY_CONFIG_DIR/cwd resolution the live store itself will use), so
+// this hint always matches the ACTUAL active domain's real values instead
+// of a hardcoded literal that only matched one prior domain (e.g. the
+// animal-health case_type values, stale the moment casey's own default
+// config switched to the IT-helpdesk domain). Falls back to a plausible
+// shipped default only if the config file genuinely cannot be read yet
+// (never expected in normal operation -- thatcher.config.yml is required
+// for casey to boot at all). The actual WRITE-TIME validation below still
+// reads the live config-declared enum via store().getFieldEnum(), the real
+// authority -- this hint is display-only, kept in sync so the model is
+// never shown options that write-time enforcement would then reject.
+const DEFAULT_CASE_TYPE_VALUES = readThatcherFieldEnum('case', 'case_type') || ['unset']
+const DEFAULT_PRIORITY_VALUES = readThatcherFieldEnum('case', 'priority') || ['low', 'normal', 'high', 'urgent']
 // Same schema-hint-vs-enforcement split as case_type/priority above: the
 // workflow's real stage graph (thatcher.config.yml workflows.case_lifecycle)
 // is the actual authority (CaseStore._machine / getValidStatuses()), enforced

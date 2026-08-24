@@ -72,3 +72,27 @@ export function _resetConfigCache() { cached = null }
 export function configDirInUse() {
   return process.env.CASEY_CONFIG_DIR ? path.resolve(process.env.CASEY_CONFIG_DIR) : DEFAULT_CONFIG_DIR
 }
+
+let thatcherEnumCache = null
+
+// Reads a thatcher.config.yml entity.field enum's options[] -- used to seed
+// case-tools.js's tool-schema `enum` hints (case_type, priority) so the
+// model is shown the ACTIVE domain's real values instead of a hardcoded
+// literal that only matched one prior domain. Same CASEY_CONFIG_DIR > cwd
+// precedence as case-store.js's own CaseStore constructor default (see
+// there for why) -- this must resolve the SAME thatcher.config.yml the live
+// store will load, or the tool-schema hint and the write-time enforcement
+// (store().getFieldEnum(), the actual authority) would silently diverge.
+// Best-effort: returns null on any read/parse failure so a caller can fall
+// back to its own hardcoded default rather than crashing plugin load.
+export function readThatcherFieldEnum(entity, field) {
+  if (!thatcherEnumCache) {
+    try {
+      const dir = process.env.CASEY_CONFIG_DIR ? path.resolve(process.env.CASEY_CONFIG_DIR) : process.cwd()
+      const cfgPath = path.join(dir, 'thatcher.config.yml')
+      thatcherEnumCache = fs.existsSync(cfgPath) ? yaml.load(fs.readFileSync(cfgPath, 'utf8')) : {}
+    } catch { thatcherEnumCache = {} }
+  }
+  const options = thatcherEnumCache?.entities?.[entity]?.fields?.[field]?.options
+  return Array.isArray(options) ? options : null
+}
