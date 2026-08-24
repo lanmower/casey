@@ -9,6 +9,7 @@
 //   runtimeStatus, queueStatus, alertWebhookUrl
 import { tagList } from '../../timestamp.js'
 import { calculateDegradationRate } from '../../degraded-turns.js'
+import { REPORT_ENTITY_LABEL, REPORT_SECTIONS, CRITICAL_FIELDS, fieldLabel } from '../../store/report-shape.js'
 
 export function registerOperations(app, deps) {
   const {
@@ -287,6 +288,13 @@ export function registerOperations(app, deps) {
       tz: SAST_TZ,
       tz_label: process.env.CASEY_TZ_LABEL || (process.env.CASEY_TZ ? '' : 'SAST'),
       country_code: (process.env.CASEY_COUNTRY_CODE || '27').replace(/\D/g, '') || '27',
+      // Report-field display metadata (entity label, per-field display_label/
+      // section, section order) so ReportSections in the SPA renders whatever
+      // vocabulary the active config package declares (report-fields.yml)
+      // instead of a hardcoded animal-health field-label table.
+      entity_label: REPORT_ENTITY_LABEL,
+      report_sections: REPORT_SECTIONS,
+      visit_critical: CRITICAL_FIELDS.map(k => ({ key: k, label: fieldLabel(k) })),
     })
   }))
 

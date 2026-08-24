@@ -1,52 +1,25 @@
 // report-sections.js -- report field display split into Section()-grouped
-// clusters (ux-case-detail-report-field-sections): Visit critical / Animal &
-// symptoms / People on site / Notes & media -- replaces the legacy flat
-// REPORT_FIELDS list. Field-source and field-note derivation ported
-// byte-for-byte in logic from the old app.js fieldSources()/fieldNotes().
+// clusters (ux-case-detail-report-field-sections), section titles/fields
+// declared by the active config package's report-fields.yml and served via
+// /api/config -- replaces the legacy flat REPORT_FIELDS list. Field-source
+// and field-note derivation ported byte-for-byte in logic from the old
+// app.js fieldSources()/fieldNotes().
 
 import * as webjsx from '/design/vendor/webjsx/index.js';
 import { Section, Alert } from '/design/src/components/content.js';
 import { Chip } from '/design/src/components/shell.js';
 import { ReportField } from './report-field.js';
+import { state } from '../../state.js';
 const h = webjsx.createElement;
 
-// [key, plain-language label, section] -- section groups replace the legacy
-// single flat list while keeping the exact same field set and labels.
-const REPORT_SECTIONS = [
-    {
-        title: 'Visit critical', keys: [
-            ['species', 'Animals'], ['symptoms', 'Signs'], ['location', 'Where'],
-            ['how_to_find', 'How to find the place'], ['farmer_available', 'Farmer available?'],
-            ['contact_fallback', 'Other contact'],
-        ]
-    },
-    {
-        title: 'Animal & symptoms', keys: [
-            ['affected_count', 'How many affected'], ['dead_count', 'How many died'],
-            ['onset', 'When it started'], ['suspected_disease', 'Suspected disease'],
-            ['recent_movement', 'Recent movement'], ['access_notes', 'Access / travel'],
-            ['identifying_traits', 'Identifying the animals'],
-        ]
-    },
-    {
-        title: 'People on site', keys: [
-            ['present_person', 'Who is with the animals'], ['present_person_relation', 'Their link to the owner'],
-            ['owner_name', 'Owner name'], ['owner_contact', 'Owner contact'],
-        ]
-    },
-    {
-        title: 'Notes & media', keys: [
-            ['photos', 'Photos'], ['audio', 'Voice notes'], ['notes', 'Other notes'],
-            ['language_detected', 'Language detected'], ['sites', 'Other sites in this visit'],
-        ]
-    },
-];
-
-const VISIT_CRITICAL = [
-    ['species', 'what animals'], ['symptoms', 'the signs'], ['location', 'where'],
-    ['how_to_find', 'how to find the place'], ['farmer_available', 'if the farmer will be there'],
-    ['contact_fallback', 'another contact'],
-];
+// [key, plain-language label, section] -- driven by the live /api/config
+// payload (report_sections/visit_critical, see dashboard/routes/operations.js
+// and store/report-shape.js) so this view renders whatever field vocabulary
+// the active config package declares, instead of a hardcoded animal-health
+// field-label table. Empty array (config not yet fetched) renders no
+// sections rather than throwing.
+const reportSections = () => state.config?.report_sections || [];
+const visitCritical = () => (state.config?.visit_critical || []).map(f => [f.key, f.label]);
 
 const has = (r, k) => r[k] != null && String(r[k]).trim() !== '';
 
@@ -85,8 +58,9 @@ export function ReportSections({ c, events, onSaved, key } = {}) {
     const r = parseReport(c.report);
     const src = fieldSources(events);
     const fnotes = fieldNotes(events);
-    const any = REPORT_SECTIONS.some(sec => sec.keys.some(([k]) => has(r, k)));
-    const missingVC = VISIT_CRITICAL.filter(([k]) => !has(r, k));
+    const sections = reportSections();
+    const any = sections.some(sec => sec.keys.some(([k]) => has(r, k)));
+    const missingVC = visitCritical().filter(([k]) => !has(r, k));
 
     const readyBanner = any
         ? (missingVC.length
@@ -107,10 +81,11 @@ export function ReportSections({ c, events, onSaved, key } = {}) {
             srcVals.some(v => v === 'manual' || v === 'both') ? Chip({ size: 'sm', tone: 'ok', children: 'Operator entered' }) : null)
         : null;
 
+    const entityLabel = state.config?.entity_label || 'report';
     return h('div', { key, class: 'casey-report' },
-        h('div', { class: 'casey-report-head' }, 'Report from the field', any ? null : h('span', { class: 'casey-rep-missing' }, ' (nothing recorded yet)')),
+        h('div', { class: 'casey-report-head' }, `${entityLabel[0].toUpperCase()}${entityLabel.slice(1)} details`, any ? null : h('span', { class: 'casey-rep-missing' }, ' (nothing recorded yet)')),
         srcLegend, readyBanner, audioBanner,
-        ...REPORT_SECTIONS.map(sec => h('div', { key: sec.title }, Section({
+        ...sections.map(sec => h('div', { key: sec.title }, Section({
             title: sec.title,
             children: sec.keys.map(([k, label]) => ReportField({
                 key: k, caseId: c.id, k, label, value: has(r, k) ? String(r[k]) : '',

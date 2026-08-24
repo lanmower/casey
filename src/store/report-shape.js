@@ -47,6 +47,26 @@ export const NEVER_INFERRED_FIELDS = reportFields.fields.filter(f => f.never_inf
 export const ENQUIRY_HEADLINE_FIELDS = reportFields.enquiry_headline_fields
   || reportFields.fields.filter(f => f.critical_for_visit).slice(0, 2).map(f => f.key)
 
+// Plain-language display label per field, for the dashboard's ReportSections
+// view -- falls back to the raw key if a config omits display_label.
+export const FIELD_LABELS = Object.fromEntries(reportFields.fields.map(f => [f.key, f.display_label || f.key]))
+export const fieldLabel = (key) => FIELD_LABELS[key] || key
+
+// Fields grouped into named display sections (config-declared `section`,
+// default 'Other') in field-declaration order, dedup'd, for the dashboard's
+// ReportSections view -- replaces the old hardcoded REPORT_SECTIONS array
+// that assumed animal-health field names.
+export const REPORT_SECTIONS = (() => {
+  const order = []
+  const bySection = new Map()
+  for (const f of reportFields.fields) {
+    const section = f.section || 'Other'
+    if (!bySection.has(section)) { bySection.set(section, []); order.push(section) }
+    bySection.get(section).push([f.key, f.display_label || f.key])
+  }
+  return order.map(title => ({ title, keys: bySection.get(title) }))
+})()
+
 export const REPORT_ENTITY_LABEL = reportFields.entity_label || 'report'
 export const REPORT_TOOL_NAME = reportFields.tool_name || 'case_report'
 export const REPORT_TOOL_DESCRIPTION = reportFields.tool_description || ''
