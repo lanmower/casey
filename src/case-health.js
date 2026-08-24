@@ -13,6 +13,7 @@
 // sweep layer turns that list into observable tags and notes.
 
 import { tsMs, tagList, parseReport } from './timestamp.js'
+import { CRITICAL_FIELDS } from './store/report-shape.js'
 
 // Default thresholds, in milliseconds, tuned for a rural one-shot reporting
 // service where a field visit is the goal and delay is the enemy. Every value is
@@ -49,8 +50,12 @@ export const DEFAULT_THRESHOLDS = {
 // Default only -- classifyCaseHealth prefers thresholds.visitCritical (an array)
 // when present, so a deployment with a different report schema (e.g. a
 // case_type whose on-site-critical fields differ) can retune it via
-// mergeThresholds/PUT /api/thresholds with no code change.
-export const VISIT_CRITICAL = ['species', 'symptoms', 'location', 'how_to_find', 'farmer_available', 'contact_fallback']
+// mergeThresholds/PUT /api/thresholds with no code change. Sourced from the
+// active config package's report-fields.yml critical_for_visit flags (see
+// store/report-shape.js) rather than a hardcoded literal, so the default
+// itself already matches whichever domain (animal-health, IT helpdesk, or a
+// deployer's own) is configured.
+export const VISIT_CRITICAL = CRITICAL_FIELDS
 
 // Fallback only -- classifyCaseHealth prefers the live thresholds.openStatuses
 // (case-sweep.js passes store.getOpenStatuses()) so a workflow-config change is

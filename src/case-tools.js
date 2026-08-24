@@ -8,6 +8,7 @@
 
 import { getCaseStore } from './case-runtime.js'
 import { AGENT_USER, REPORT_KEYS } from './case-store.js'
+import { REPORT_FIELD_DEFS, REPORT_GEO_FIELD_DEFS, REPORT_TOOL_NAME, REPORT_TOOL_DESCRIPTION, NEVER_INFERRED_FIELDS, ENQUIRY_HEADLINE_FIELDS } from './store/report-shape.js'
 import { normalizeLocation } from './location-normalize.js'
 import { recordProvenanceObservation } from './provenance-wire.js'
 import { mergeTag, OPTED_OUT_TAG } from './hooks/heuristics.js'
@@ -234,41 +235,14 @@ export function buildCaseToolset(storeOrNull) {
         }
         return { ok: true, case: slimCase(updated) }
       }),
-    defTool('case_report', 'cases',
-      'Record what you have learned about an animal-disease report, one field at a time, as the farmer gives it. Pass ONLY the fields you actually learned this turn -- they merge into the running report, so you never lose earlier facts and never need to repeat a field the farmer already gave. This is how the organisers see a structured, organised report without the farmer being interrogated. Leave a field out if you do not know it yet; do not guess.',
+    defTool(REPORT_TOOL_NAME, 'cases',
+      REPORT_TOOL_DESCRIPTION,
       {
         type: 'object',
         properties: {
           id: str('Case id'),
-          species: str('Animal(s): cattle, sheep, goats, pigs, etc.'),
-          age_bracket: str('The affected animals\' age bracket, ONLY if stated: 1-4mo / 5-8mo / 9mo-2yr, or in the farmer\'s own words. Leave out if not stated; do not guess from species or symptoms.'),
-          symptoms: str('What the farmer sees: drooling, blisters, lameness, sudden death, etc.'),
-          location: str('Where: farm name, nearest town, district, GPS, or the farmer\'s own description'),
-          how_to_find: str('Directions / landmarks to reach the place in the bush'),
-          affected_count: str('How many animals are affected (number or "a few"/"many")'),
-          herd_total: str('Total herd/flock size at the location, if the farmer states it -- distinct from affected_count, which is only the sick/dead ones. Leave out if not stated.'),
-          dead_count: str('How many have died, if any'),
-          onset: str('When it started and how fast it is spreading'),
-          treatment_history: str('Whether the animals were vaccinated, treated, or dewormed, and what/dosage if treated (e.g. "yes, Terramycin, one dose", "no", "dewormed last month"). Leave out if not discussed; do not guess.'),
-          suspected_disease: str('A disease name the farmer or worker actually SAID -- record their exact word, never your own inference from symptoms. Leave this out if no one named a disease; do not diagnose or guess.'),
-          recent_movement: str('Recent animal movement/contact: auctions, new stock, shared grazing'),
-          identifying_traits: str('Markings, ear tags, breed -- anything to identify the animals'),
-          access_notes: str('Access/travel notes: gate, road condition, 4x4 needed, permission'),
-          farmer_available: str('Will the farmer be there on arrival? When are they reachable?'),
-          contact_fallback: str('Who else to contact / another number if the farmer is unreachable'),
-          photos: str('Note that the farmer sent a photo (set to a short description). Each call ADDS a new photo note -- if more than one photo arrives, call again with a description of the new one; earlier descriptions are kept, never overwritten.'),
-          audio: str('Note that the farmer sent a voice note (set to a short description or transcription). Each call ADDS a new note -- if more than one voice note arrives, call again; earlier notes are kept, never overwritten.'),
-          notes: str('Anything else worth recording for the organisers'),
-          present_person: str('Who is with the animals right now, if not the owner (e.g. a relative, herder, neighbour)'),
-          present_person_relation: str('How the present person is linked to the owner: owner, relative, herder, or neighbour'),
-          owner_name: str("The animals' owner's name, if the worker learns it and the owner is not present"),
-          owner_contact: str("A number to reach the owner, if the worker learns it and the owner is not present"),
-          condition_status: str('Whether the animals are eating/drinking/behaving normally otherwise, ONLY if the farmer or worker actually said so. Leave out if not discussed.'),
-          nearby_cases: str('Whether other animals nearby (not this herd) are showing signs, or there have been deaths nearby -- distinct from dead_count, which is this herd only. Leave out if not mentioned.'),
-          environment_change: str('Any recent change in environment, diet, or rangeland/grazing the farmer mentions. Leave out if not mentioned; do not guess.'),
-          lat: { type: 'number', description: 'Latitude for the organisers\' map. If the worker reads out real GPS coordinates, use those exactly. Otherwise, use your OWN knowledge to give your best estimate for the place described (a named town, farm, or landmark you can place) -- this is how the case gets a map point at all, so estimate confidently when the description is identifiable; leave both lat and lon out only when the place genuinely cannot be placed from what was said.' },
-          lon: { type: 'number', description: 'Longitude, alongside lat -- your own best-effort estimate when no exact GPS was given, using your own knowledge of the place described.' },
-          sites: str('ONLY when the worker describes a SECOND distinct place/herd within the SAME visit (not a separate outbreak elsewhere -- use case_new for that): a short plain-text note of the second site, e.g. "5 goats down the road at the old kraal, also drooling". The main species/location fields above stay the first/primary site; this adds the second one alongside it without losing it. Each call with this set ADDS one more site note.'),
+          ...Object.fromEntries(REPORT_FIELD_DEFS.map(f => [f.key, str(f.description)])),
+          ...Object.fromEntries(REPORT_GEO_FIELD_DEFS.map(f => [f.key, { type: 'number', description: f.description }])),
         },
         required: ['id'],
       },
@@ -788,7 +762,16 @@ function selfCheckLoadBearingToolDescriptions() {
   const byName = Object.fromEntries(tools.map(t => [t.name, t]))
   const required = [
     { tool: 'case_update', field: 'case_type', pattern: /directly and explicitly stated/, name: 'case_type must be agent-stated-only, never inferred' },
-    { tool: 'case_report', field: 'suspected_disease', pattern: /actually SAID/, name: 'suspected_disease must be agent-stated-only, never inferred' },
+    // Config-driven: every report field the active config's report-fields.yml
+    // flags never_inferred:true carries its own never_inferred_guard_pattern
+    // (a literal substring of that field's own description) that must survive
+    // any future tool-description rewrite -- generalizes the single hardcoded
+    // suspected_disease check to whatever the active domain declares.
+    ...NEVER_INFERRED_FIELDS.map(f => ({
+      tool: REPORT_TOOL_NAME, field: f.key,
+      pattern: new RegExp(f.never_inferred_guard_pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      name: `${f.key} must be agent-stated-only, never inferred`,
+    })),
   ]
   for (const { tool, field, pattern, name } of required) {
     const desc = byName[tool]?.schema?.parameters?.properties?.[field]?.description
@@ -947,9 +930,10 @@ function enquiryRow(c, distanceKm) {
   if (!c) return null
   let report = {}
   try { report = c.report ? JSON.parse(c.report) : {} } catch { report = {} }
+  const headline = Object.fromEntries(ENQUIRY_HEADLINE_FIELDS.map(k => [k, report[k] || null]))
   return {
     id: c.id, ref: c.ref, status: c.status, priority: c.priority,
-    species: report.species || null, location: report.location || null,
+    ...headline,
     assignee: c.assignee || null, last_event_at: c.last_event_at,
     ...(typeof distanceKm === 'number' ? { distance_km: distanceKm } : {}),
   }

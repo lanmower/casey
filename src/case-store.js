@@ -25,7 +25,7 @@ import yaml from 'js-yaml'
 import { buildCaseMachine, canTransition, nextStates } from './case-machine.js'
 import { tokens } from './correlate.js'
 import { DERIVED_ONLY_FIELDS, writeGuardViolation } from './store/guards.js'
-import { REPORT_KEYS, REPORT_KEY_ORDER } from './store/report-shape.js'
+import { REPORT_KEYS, REPORT_KEY_ORDER, APPEND_FIELDS } from './store/report-shape.js'
 import { byCreatedAscList, byCreatedDescList } from './store/query.js'
 import { tagList } from './timestamp.js'
 
@@ -722,7 +722,7 @@ export class CaseStore {
   _mergeReportFields(current, incoming) {
     const merged = { ...current }
     const cappedFields = []
-    const APPEND_KEYS = new Set(['photos', 'audio', 'sites'])
+    const APPEND_KEYS = APPEND_FIELDS
     for (const [k, v] of Object.entries(incoming)) {
       if (v == null || String(v).trim() === '') continue
       // Bounded worst-case for the append-prone fields, applied to EVERY
@@ -1293,7 +1293,7 @@ export class CaseStore {
         if (!REPORT_KEYS.has(k)) continue
         if (v == null || String(v).trim() === '') continue
         const have = tgtReport[k] != null && String(tgtReport[k]).trim() !== ''
-        if ((k === 'photos' || k === 'audio' || k === 'sites') && have && String(tgtReport[k]) !== String(v)) {
+        if (APPEND_FIELDS.has(k) && have && String(tgtReport[k]) !== String(v)) {
           mergedReport[k] = `${tgtReport[k]}; ${v}`
         } else if (!have) {
           mergedReport[k] = v
