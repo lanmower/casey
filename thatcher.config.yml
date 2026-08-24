@@ -1,14 +1,19 @@
-# casey -- case-tracking system of record (thatcher config)
+# casey -- generic IT/facilities helpdesk demo (thatcher config)
+#
+# This is casey's own default, non-animal-health demo domain (see
+# AGENTS.md's config-loader section) -- a reference example a new deployer
+# can copy and adapt via CASEY_CONFIG_DIR, alongside config/default/report-
+# fields.yml and config/default/persona.cjs.
 #
 # Three entities:
-#   case        -- one tracked case, opened from a channel conversation
+#   case        -- one tracked helpdesk ticket, opened from a channel conversation
 #   event       -- append-only timeline: inbound msgs, outbound replies, agent
 #                 observations, and human/agent actions (full audit trail)
 #   contact     -- a person/identity across channels (whatsapp number, discord id)
 #
-# The workflow drives case lifecycle. The agent is fully autonomous: it may
-# create cases, append events, and transition stages via tools. Every change is
-# an `event` row, so the dashboard can observe and a human can override.
+# The workflow drives ticket lifecycle. The agent is fully autonomous: it may
+# create tickets, append events, and transition stages via tools. Every change
+# is an `event` row, so the dashboard can observe and a human can override.
 
 roles:
   admin:
@@ -64,8 +69,8 @@ entities:
       handle:       { type: text }
       notes:        { type: textarea }
       tier:         { type: enum, options: [reporter, field_worker], default: reporter }
-                                                     # reporter = casual/public report-only, no agentic case-query access.
-                                                     # field_worker = elevated tier: agentic case_list/case_mine/case_today
+                                                     # reporter = regular employee (report-only), no agentic ticket-query access.
+                                                     # field_worker = elevated tier: IT technician -- agentic case_list/case_mine/case_today
                                                      # queries alongside reporting, plus casual location check-ins so they
                                                      # show up on the operator map for dispatch. OPERATOR-ASSIGNED ONLY via
                                                      # the dashboard/CLI -- never contact-self-service, never LLM-settable.
@@ -74,7 +79,7 @@ entities:
       last_location_lat:  { type: number }            # field_worker casual location check-in (see case_checkin tool);
       last_location_lon:  { type: number }            # distinct from case.lat/lon (a CASE's location, not a person's)
       last_location_at:   { type: text }              # ISO timestamp of the check-in, for map staleness fade-out
-      last_report_lat:    { type: number }            # this contact's most recent ANIMAL-REPORT location (case_report's
+      last_report_lat:    { type: number }            # this contact's most recent TICKET's own location (case_report's
       last_report_lon:    { type: number }            # own lat/lon, propagated here on write) -- distinct from
                                                        # last_location_* (the worker's own position) and from any single
                                                        # case's own lat/lon (this is the CONTACT's latest, refined forward
@@ -84,28 +89,28 @@ entities:
       last_report_case_id: { type: text }              # the case id that produced last_report_lat/lon -- drill-down target
 
   case:
-    label: Case
-    label_plural: Cases
+    label: Ticket
+    label_plural: Tickets
     permission_template: case_perms
     fields:
       <<: *system_fields
-      ref:         { type: text }                    # human ref e.g. CASE-1024
+      ref:         { type: text }                    # human ref e.g. TICKET-1024
       channel:     { type: enum, options: [whatsapp, discord, sim, other], required: true }
       external_id: { type: text, required: true }    # conversation key (chat/channel id)
       contact_id:  { type: text }
       subject:     { type: text }
       summary:     { type: textarea }                # agent-maintained rolling summary
-      report:      { type: textarea }                # agent-maintained structured field report (JSON).
-                                                     # Keys the agent fills as the farmer gives them: species,
-                                                     # symptoms, location, how_to_find, affected_count, dead_count,
-                                                     # onset, suspected_disease, recent_movement, photos,
-                                                     # identifying_traits, access_notes, farmer_available,
-                                                     # contact_fallback, audio, notes, present_person,
-                                                     # present_person_relation, owner_name, owner_contact. Any
-                                                     # subset -- never required, so casey amplifies the report
-                                                     # without imposing a form on the farmer.
+      report:      { type: textarea }                # agent-maintained structured ticket JSON.
+                                                     # Keys the agent fills as the employee gives them: category,
+                                                     # description, urgency, device_or_asset, location,
+                                                     # affected_count, onset, blocking_work, prior_workarounds,
+                                                     # recent_changes, preferred_contact_time,
+                                                     # requester_available, photos, notes,
+                                                     # reported_by_proxy, reported_by_proxy_relation. Any
+                                                     # subset -- never required, so casey amplifies the ticket
+                                                     # without imposing a form on the employee.
       priority:    { type: enum, options: [low, normal, high, urgent], default: normal }
-      case_type:   { type: enum, options: [unset, outbreak, follow_up, lab_sample, import_alert], default: unset }
+      case_type:   { type: enum, options: [unset, outage, access_request, maintenance, procurement], default: unset }
                                                      # coarse category, enables per-type SLA targets; unset = routine intake
       tags:        { type: text }                    # comma-separated, agent-managed
       assignee:    { type: text }                    # operator handle, or 'agent'
@@ -113,9 +118,9 @@ entities:
       status:      { type: enum, options: [new, triaging, in_progress, waiting, resolved, closed], default: new }
       transition_reason: { type: text }              # written by thatcher's workflow engine on transition
       last_event_at: { type: text }
-      lat:         { type: number }                  # case location for proximity ("cases near me"); optional
+      lat:         { type: number }                  # site location for proximity (multi-site orgs); optional
       lon:         { type: number }
-      claimed_at:  { type: text }                    # when a worker claimed/assigned themselves (enquiry flow)
+      claimed_at:  { type: text }                    # when a technician claimed/assigned themselves (enquiry flow)
       # Derived-only fields: computed FROM other fields by casey's own system
       # code, never hand-typed by a contact/worker/operator and never agent-
       # settable. DERIVED_ONLY_FIELDS in case-store.js enforces this at the
@@ -141,10 +146,10 @@ entities:
                                                        # report without a join. Deliberately a snapshot, not a live
                                                        # join: a worker promoted/demoted after reporting keeps the
                                                        # tier they had when the case was opened, since that reflects
-                                                       # who was actually on-site relaying the report at the time.
+                                                       # who was actually reporting at the time.
     # Row-access scope for worker enquiries: scope=assigned keys on the `assignee`
     # field (thatcher's checkRowAccess reads rowAccess.field), so a worker's 'my
-    # cases' returns only cases assigned to them. Enforced when list() is called
+    # tickets' returns only tickets assigned to them. Enforced when list() is called
     # with opts.user (the worker principal); internal/admin reads pass no user.
     row_access: { scope: assigned, field: assignee }
     # Default list order: most-recently-active first, created_at as the tiebreak --
@@ -226,7 +231,7 @@ workflows:
         backward: [in_progress]        # reopen
       - name: closed
         requires_role: [operator, admin]
-        backward: [resolved]           # reopen a closed case (operator/admin only)
+        backward: [resolved]           # reopen a closed ticket (operator/admin only)
 
 # NOTE: thatcher's config schema expects pagination at the TOP-LEVEL `system`
 # key (see node_modules/thatcher/src/config/config-loader.js
@@ -234,11 +239,7 @@ workflows:
 # collides with thatcher's own unrelated `thresholds.timing/ui/polling`
 # defaults, which casey never uses (casey's OWN health/SLA thresholds are a
 # separate JS-side runtime concept in src/case-health.js and src/thresholds.js,
-# entirely unrelated to this yaml block). The previous `thresholds.system.
-# pagination` nesting here was silently ignored by thatcher, which fell back to
-# its own defaults (default_page_size 50, max_page_size 500) instead of the
-# 25/200 this file declared -- confirmed by reading thatcher's crud-handlers.js,
-# which reads `config.system?.pagination` directly.
+# entirely unrelated to this yaml block).
 system:
   pagination:
     default_page_size: 25

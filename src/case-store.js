@@ -68,7 +68,13 @@ const APPEND_FIELD_MAX_LEN = 20000
 
 export class CaseStore {
   constructor(opts = {}) {
-    this.configPath = opts.config || path.resolve(process.cwd(), 'thatcher.config.yml')
+    // Explicit opts.config wins; then CASEY_CONFIG_DIR/thatcher.config.yml
+    // (a deployer-set config package, e.g. uhh's bin script) so `createCaseStore()`
+    // with no args resolves correctly regardless of process.cwd() at invocation
+    // time; falls back to cwd/thatcher.config.yml (this repo's own default) last.
+    this.configPath = opts.config
+      || (process.env.CASEY_CONFIG_DIR ? path.resolve(process.env.CASEY_CONFIG_DIR, 'thatcher.config.yml') : null)
+      || path.resolve(process.cwd(), 'thatcher.config.yml')
     // The DB lives at <cwd>/data/app.db and is cwd-bound: thatcher primes its
     // better-sqlite3 handle by calling getDatabase() argless during init
     // (index.js initDatabase -> database-core.migrate), which resolves

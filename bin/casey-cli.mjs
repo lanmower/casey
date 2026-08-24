@@ -273,9 +273,12 @@ async function main() {
       console.log(warn('WHATSAPP_VERIFY_TOKEN unset - webhook verification will use freddie\'s default token (set WHATSAPP_VERIFY_TOKEN to a real secret)'))
     }
     if (!hasCreds('discord') && !hasCreds('whatsapp')) console.log(warn('no real channel connected - casey cannot start without at least one of discord/whatsapp configured'))
-    // thatcher config
-    const cfgFile = path.join(ROOT, 'thatcher.config.yml')
-    console.log(existsSync(cfgFile) ? ok('thatcher.config.yml present') : bad('thatcher.config.yml missing - casey will fail to start (see README Layout section)'))
+    // thatcher config -- same CASEY_CONFIG_DIR > cwd precedence as
+    // case-store.js's own CaseStore constructor default (see there for why).
+    const cfgFile = process.env.CASEY_CONFIG_DIR
+      ? path.join(path.resolve(process.env.CASEY_CONFIG_DIR), 'thatcher.config.yml')
+      : path.join(ROOT, 'thatcher.config.yml')
+    console.log(existsSync(cfgFile) ? ok(`thatcher.config.yml present (${cfgFile})`) : bad(`thatcher.config.yml missing at ${cfgFile}`))
     if (!existsSync(cfgFile)) problems++
     // Validate the workflow stage graph the same way init() does, but without
     // booting thatcher or touching a DB (pure config read). A broken graph
