@@ -5,14 +5,87 @@ Operating notes for agents (and humans) working in the casey repo. Included by
 
 ## What casey is
 
-casey is a thin orchestrator for animal-disease surveillance in rural South
-Africa. Anyone messaging over WhatsApp/Discord is a reporter; casey gathers a
-structured report warmly, without interrogation. A reporter defaults to the
-`reporter` tier (casual, public, report-only); an operator may promote a
-trusted reporter to `field_worker`, which unlocks agentic case-query access
-and location check-ins so they show up on the operator map. casey amplifies
-the team's workflow -- it does not impose disease rules or escalation;
-priority stays with people.
+casey is a thin, domain-configurable orchestrator for structured intake over
+WhatsApp/Discord: anyone messaging is a reporter, and casey gathers a
+structured record warmly, without interrogation. The actual domain --
+report/ticket vocabulary, agent persona, thatcher entity schema, dashboard
+labels -- is entirely config-driven (see "Configuration architecture"
+below); this repo ships a generic IT/facilities-helpdesk demo config by
+default. The original animal-disease-surveillance-for-rural-South-Africa
+domain this project was first built for now lives as a separate, fully
+self-contained config package: `AnEntrypoint/uhh` (private), installable via
+`npx github:AnEntrypoint/uhh`. A reporter defaults to the `reporter` tier
+(casual, public, report-only); an operator may promote a trusted reporter to
+`field_worker`, which unlocks agentic case-query access and location
+check-ins so they show up on the operator map -- this tier mechanism is
+domain-independent and unchanged by which config package is loaded. casey
+amplifies the team's workflow -- it does not impose domain-specific rules or
+escalation; priority stays with people.
+
+## Configuration architecture
+
+casey's domain (report/ticket field vocabulary, agent persona, thatcher
+entity/workflow schema, dashboard field labels) is entirely config-driven,
+resolved by `src/config-loader.js` at process start:
+
+- `CASEY_CONFIG_DIR` (a deployer-set env var, e.g. set by `uhh`'s
+  `bin/uhh.js` bootstrap script) points at a directory holding
+  `thatcher.config.yml`, `report-fields.yml`, and `persona.cjs`. Absent,
+  casey falls back to its own bundled `config/default/` (the generic
+  IT-helpdesk demo) plus the repo-root `thatcher.config.yml`.
+- `report-fields.yml` declares the report field vocabulary: `entity_label`
+  (e.g. "report"/"ticket"), `enquiry_headline_fields` (the two fields safe
+  to show in a cross-worker PII-free enquiry list), `tool_name`/
+  `tool_description` (the `case_report` tool's own name/description), and
+  `fields[]` -- each with `key`, `description` (becomes that field's tool-
+  schema description), and optional `critical_for_visit` (on-site-visit-
+  critical, feeds `case-health.js`'s `VISIT_CRITICAL` default),
+  `append` (photos/audio-style fields that accumulate rather than
+  overwrite), `never_inferred` + `never_inferred_guard_pattern` (a
+  structural regression guard -- see below), `display_label` + `section`
+  (dashboard `ReportSections` grouping, served via `/api/config`).
+- `persona.cjs` (CommonJS `module.exports`, not ES `export` -- see
+  `src/config-loader.js` for why: it must load synchronously via
+  `createRequire`) declares the agent's system-prompt text: `domainIntro`,
+  `gatherPriorityOrder`, `gatherLeadText`, `photoNudge`, `replyStyleRules`,
+  `workerCatchUpText`, `casualReporterEnquiryBlockedText`,
+  `returnedAfterGapText`, `entitySubjectPlural`, `entityLabel`. Consumed by
+  `hooks/prompt.js`'s `caseSystemPrompt`, which still owns all *structural*
+  prompt logic (the `<<DATA>>` delimiter safety, the stale-location check,
+  the `returnedAfterGap` timing, the `firstMessage` branch) -- only the
+  domain-specific TEXT comes from config.
+- `thatcher.config.yml` is unchanged in shape from before this
+  configurability work (see "thatcher / busybase chain" below) -- a deployer
+  writes/adapts it the same way any thatcher-consuming project would.
+
+`src/store/report-shape.js` is the single choke point: `REPORT_KEYS`/
+`REPORT_KEY_ORDER`/`CRITICAL_FIELDS`/`APPEND_FIELDS`/`NEVER_INFERRED_FIELDS`/
+`ENQUIRY_HEADLINE_FIELDS`/`REPORT_SECTIONS`/`fieldLabel` all derive from the
+loaded config; every consumer (`case-store.js`, `case-tools.js`,
+`case-health.js`, `dashboard/routes/operations.js`) imports these derived
+exports rather than reading config directly, so a new consumer never needs
+its own config-parsing logic.
+
+**Structural regression guards stay config-aware, not domain-hardcoded.**
+Both `hooks/prompt.js`'s `selfCheckLoadBearingPromptContent` and
+`case-tools.js`'s `selfCheckLoadBearingToolDescriptions` run at module load
+and throw if a load-bearing behavioral instruction (the two-item-question
+rule, a `never_inferred` field's report-not-assert guard phrase) is silently
+dropped by a future prompt/description edit. The `never_inferred` check now
+iterates the active config's own `NEVER_INFERRED_FIELDS` (each carrying its
+own `never_inferred_guard_pattern`) instead of a single hardcoded
+`suspected_disease` check, so this guard is real under any config, not just
+the animal-health one.
+
+**Publishing a new config package (the `uhh` pattern).** A standalone
+config package (own `package.json`, `bin/` bootstrap script, `config/`
+directory) declares casey as a real `github:AnEntrypoint/casey#main` npm
+dependency, sets `CASEY_CONFIG_DIR` to its own bundled config directory in
+its bootstrap script before dynamically importing `casey/bin/casey.js`, and
+is published as its own GitHub repo -- `npx github:<owner>/<pkg-name>
+<command>` then boots casey fully pre-configured for that domain with zero
+local config authoring. See `AnEntrypoint/uhh`'s `bin/uhh.js` as the
+reference implementation.
 
 ## Architecture
 
@@ -160,15 +233,18 @@ commit history.
 ## Source map
 
 ```
-thatcher.config.yml        entities + case workflow (system of record)
+thatcher.config.yml        entities + case workflow (system of record; generic demo by default, see Configuration architecture)
+config/default/            bundled default config package (report-fields.yml, persona.cjs) -- the generic IT-helpdesk demo
 bin/casey.js               CLI: init / doctor / up / dashboard / cases / show / report
 plugins/case-tools/        freddie plugin registering case_* tools (auto-discovered)
 src/
+  config-loader.js         resolves CASEY_CONFIG_DIR (or config/default/) -- report-fields.yml + persona.cjs, synchronous
+  store/report-shape.js    single choke point deriving REPORT_KEYS/CRITICAL_FIELDS/APPEND_FIELDS/REPORT_SECTIONS/etc from the loaded config
   casey.js                 top-level assembly: store + host + gateway + adapters + logger
   case-store.js            thatcher wrapper: find-or-create (locked), events, transitions, paging, optimistic-lock report merge
   case-runtime.js          process singleton so the plugin reaches the live CaseStore
   provenance-wire.js       additive bridge from case_report into the provenance subsystem (src/core/, src/packs/)
-  case-tools.js            case_* tool defs; gateByTier wraps every query/mutation tool behind field_worker tier
+  case-tools.js            case_* tool defs (config-driven schema/descriptions); gateByTier wraps every query/mutation tool behind field_worker tier
   dashboard/auth.js        per-operator login: scrypt hashing, stateless HMAC-signed session cookies, operator_account CRUD
   case-machine.js          xstate case lifecycle machine
   case-health.js           per-case health/guardrail signals

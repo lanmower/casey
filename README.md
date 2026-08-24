@@ -2,14 +2,31 @@
 
 Agentic case tracking, observation, and manual editing over messaging channels.
 
-casey is used for **animal-disease surveillance in rural South Africa**. Farmers
-and NGO field workers report sick or dead livestock over WhatsApp, in their own
-language. casey greets them warmly, quietly gathers a structured report (which
-animals, the signs, where, how many, how to find the place, how to reach the
-farmer) **without interrogating them**, and gives the organising team one
-organised, observable view per report. It amplifies the team's own way of
-working -- it does not impose disease rules or escalation; priority stays with
-the people. Times are shown in SAST and phone numbers in +27 format.
+casey is a **domain-configurable** structured-intake agent -- anyone
+messaging over WhatsApp/Discord, in their own language, is a reporter; casey
+greets them warmly and quietly gathers a structured record (report/ticket
+fields declared entirely by config -- see "Configuring casey" below)
+**without interrogating them**, and gives the organising team one organised,
+observable view per report. It amplifies the team's own way of working -- it
+does not impose domain-specific rules or escalation; priority stays with the
+people. Times are shown in SAST and phone numbers in +27 format by default
+(overridable via `CASEY_TZ`/`CASEY_COUNTRY_CODE`).
+
+This repo ships a generic **IT/facilities-helpdesk** demo config by default.
+The animal-disease-surveillance-for-rural-South-Africa domain casey was
+originally built for is now a separate, fully self-contained config package:
+[`AnEntrypoint/uhh`](https://github.com/AnEntrypoint/uhh) (private) --
+`npx github:AnEntrypoint/uhh up` boots casey pre-configured for it, no local
+config authoring needed.
+
+## Configuring casey
+
+Point `CASEY_CONFIG_DIR` at a directory holding `thatcher.config.yml`,
+`report-fields.yml`, and `persona.cjs` to swap casey's entire domain (report
+vocabulary, agent persona, entity schema, dashboard labels) with no code
+change. See `AGENTS.md`'s "Configuration architecture" section for the full
+schema, and `AnEntrypoint/uhh`'s `config/` directory for a real worked
+example.
 
 casey is a thin orchestrator that composes three existing projects:
 
@@ -64,7 +81,7 @@ well, and may not speak English as a first language. So casey:
 - never sends a blank or dead-end reply -- empty, emoji-only, and media-only messages still
   get a gentle, helpful answer.
 - answers a greeting or chit-chat ("hi", "hello", "help") with a warm invitation to report,
-  not the case-acknowledgement -- a turn that carries no animal-health content does not get
+  not the case-acknowledgement -- a turn that carries no domain-relevant content does not get
   "Thank you for letting us know ... your reference is X"; the moment the contact states a
   real fact, casey switches to gathering the report as usual.
 
@@ -145,7 +162,7 @@ The dashboard is the whole operator surface -- one page, no build step:
   managed from the dashboard) even at zero load, so management sees overload and dropped claims at a
   glance without opening a case; no per-contact rows.
 - **Map view:** every case with an agent-estimated or GPS `lat`/`lon` plotted on a Leaflet+OSM map,
-  status-colored and clustered, with an outbreak-cluster overlay, an operator-coverage overlay (each
+  status-colored and clustered, with a correlated-cases overlay, an operator-coverage overlay (each
   operator's learned working area), and a field-worker location overlay (from `case_checkin`
   self-reports). A case with no coordinate lands in an "unresolved" bucket instead of being dropped.
 - **Reporters panel:** promotes a trusted reporter to the `field_worker` access tier (unlocking their
@@ -214,7 +231,7 @@ AGENTS.md "Supervised runtime" for the full env-var set.
 | `CASEY_SESSION_SECRET` | HMAC key signing the dashboard session cookie. The dashboard uses per-operator username/password login (no bearer token, no `?token=`); a fresh deployment with zero accounts auto-creates one admin with a random printed password. Random per process when unset, so a restart logs everyone out -- set it explicitly for sessions to survive a restart. |
 | `CASEY_COOKIE_SECURE=0` | Drop the `Secure` flag on the session cookie for a plain-HTTP dev/LAN deployment (Secure is on by default). |
 | `CASEY_TRANSCRIBE_VOICE_NOTES=1` | Opt-in: transcribe an inbound voice note and fold the text into the case (needs `OPENAI_API_KEY`). Off by default (external data egress). |
-| `CASEY_DESCRIBE_PHOTOS=1` | Opt-in: describe an inbound animal photo (visible signs/species/count) into the case (needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`). Off by default (external data egress). |
+| `CASEY_DESCRIBE_PHOTOS=1` | Opt-in: describe an inbound photo (visible detail relevant to the active domain's report fields) into the case (needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`). Off by default (external data egress). |
 | `CASEY_VOICE_REPLIES=1` | Opt-in: speak the reply back as a voice note so a reporter who cannot read still hears it (needs `OPENAI_API_KEY` or `ELEVENLABS_API_KEY`). Additive to the text, fail-open, off by default (external data egress). |
 | `CASEY_LOG=silent` | Silence casey's structured JSON logs (used by tests). |
 | `CASEY_RELOAD=0` | Disable hot-reload (crash-restart stays on). |
