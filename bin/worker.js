@@ -274,6 +274,24 @@ async function main() {
     const mount = mod.default
     if (typeof mount !== 'function') throw new Error(`CASEY_EXTRA_DASHBOARD_ROUTES module has no default export function: ${CASEY_EXTRA_DASHBOARD_ROUTES}`)
     await mount(dash.app, { store: casey.store })
+    // dashboard/server.js's own error-sanitizing middleware is registered
+    // LAST inside createDashboard() (Express error middleware only catches
+    // errors from routes registered before it), so it is strictly unable to
+    // catch anything thrown by a route mounted here, after createDashboard
+    // already resolved. Register the SAME sanitizing behavior again, after
+    // the deployer's routes, as a safety net -- a deployer route is expected
+    // to handle its own errors (an unguarded async route handler that
+    // rejects is an unhandled promise rejection long before it ever reaches
+    // Express middleware -- see the crash-loud handler above), but a
+    // synchronous throw or an explicit next(err) call still must never fall
+    // through to Express's own default handler, which renders a full stack
+    // trace with absolute filesystem paths since casey never sets
+    // NODE_ENV=production anywhere -- a real defect an independent
+    // adversarial review caught.
+    dash.app.use((err, req, res, next) => {
+      if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid request body' })
+      res.status(err?.status || 500).json({ error: 'internal error' })
+    })
   }
 
   // Graceful drain shared by SIGINT (standalone) and PARENT_MSG.DRAIN (forked):
