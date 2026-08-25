@@ -252,10 +252,17 @@ export function buildCaseToolset(storeOrNull) {
           id: str('Case id'),
           ...Object.fromEntries(REPORT_FIELD_DEFS.map(f => [f.key, str(f.description)])),
           ...Object.fromEntries(REPORT_GEO_FIELD_DEFS.map(f => [f.key, { type: 'number', description: f.description }])),
+          location_source: str(
+            'REQUIRED whenever lat/lon are supplied. "gps" ONLY if the person read out exact coordinates. ' +
+            'Otherwise "estimated" -- your own best-effort guess from a place name, not yet confirmed with them. ' +
+            'After you voice an estimate back and they confirm it or give a better description, call again with ' +
+            '"confirmed" and your refined lat/lon. Never guess "confirmed" -- it means they actually agreed.',
+            { enum: ['gps', 'estimated', 'confirmed'] },
+          ),
         },
         required: ['id'],
       },
-      async ({ id, lat, lon, ...fields }, ctx) => {
+      async ({ id, lat, lon, location_source, ...fields }, ctx) => {
         // Bind server-side to the turn's active case. A model error or
         // prompt-injected inbound text naming another case's ref must never
         // be able to write into a stranger's case.
@@ -295,6 +302,19 @@ export function buildCaseToolset(storeOrNull) {
         if (latLonSupplied && !hasLatLon) {
           return { error: `lat/lon out of range: lat=${lat}, lon=${lon} (expected |lat|<=90, |lon|<=180)` }
         }
+        // location_source is validated the same strict way as case_type/priority
+        // (case_update above): an explicit bad value is rejected loudly, never
+        // silently dropped -- but lat/lon may still arrive with no source named
+        // at all (an older prompt build, a model that forgot the arg), and that
+        // must not simply reject the whole coordinate write. Defaults to
+        // 'estimated' -- the SAFER of the two real provenance states when the
+        // model is silent about which one it means, so a pin never gets
+        // mislabeled 'gps'-trustworthy by omission.
+        const LOCATION_SOURCE_VALUES = new Set(['gps', 'estimated', 'confirmed'])
+        if (location_source != null && !LOCATION_SOURCE_VALUES.has(location_source)) {
+          return { error: `invalid location_source: ${location_source}`, allowed: [...LOCATION_SOURCE_VALUES] }
+        }
+        const resolvedLocationSource = hasLatLon ? (location_source || 'estimated') : null
         if (!Object.keys(incoming).length && !hasLatLon) return { error: 'no report fields supplied' }
         // The PRIOR value of every field this call touches, so a correction (a
         // field already non-null being overwritten) is distinguishable in the
@@ -345,7 +365,7 @@ export function buildCaseToolset(storeOrNull) {
           // that stale-read-then-write shape is exactly the TOCTOU race
           // updateCaseChecked was introduced to close, and this lat/lon
           // branch had silently kept the old unlocked shape.
-          const latLonResult = await store().updateCaseChecked(id, { lat, lon }, AGENT_USER)
+          const latLonResult = await store().updateCaseChecked(id, { lat, lon, location_source: resolvedLocationSource }, AGENT_USER)
           if (latLonResult.error === 'observe') return { error: 'case autonomy is "observe"; agent edits are disabled. Use case_observe to record notes.' }
           if (latLonResult.error) return { error: latLonResult.error }
           const c = latLonResult.case
@@ -378,7 +398,7 @@ export function buildCaseToolset(storeOrNull) {
           try { await store().systemUpdateDerived(id, { normalized_location: normalizeLocation(incoming.location) }) }
           catch { /* best effort -- derived-field freshness, not the write itself, is at stake */ }
         }
-        const fieldsRecorded = [...Object.keys(incoming), ...(hasLatLon ? ['lat', 'lon'] : [])]
+        const fieldsRecorded = [...Object.keys(incoming), ...(hasLatLon ? ['lat', 'lon', 'location_source'] : [])]
         // photos/audio append rather than overwrite (see mergeReport), so a
         // changed prior-vs-new value there is an ADDITION, not a correction --
         // exclude them from the correction diff, which is only meaningful for

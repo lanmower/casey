@@ -182,6 +182,20 @@ export function caseSystemPrompt(caseRow, events, contact) {
       if (coreFields.every(k => reportObj[k] != null) && !reportObj.photos) return [text]
       return []
     })() ),
+    // Location-confirm nudge: fires on every turn while case_report's most
+    // recent write left location_source='estimated' (case-tools.js) -- an
+    // agent-guessed pin the contact has not yet confirmed. Stops firing the
+    // moment a later case_report call promotes it to 'confirmed' (the
+    // contact agreed or gave a better description) or 'gps' (an exact
+    // reading arrived), so it nags at most until the NEXT reply, not forever
+    // -- the reply-composition rules above already cap the agent to ONE
+    // woven-in thing per reply, so a persistently-estimated location simply
+    // stays that one thing until it resolves. Optional per persona config
+    // (undeclared = no nudge, matching any deployment with no map/geo use
+    // case, e.g. casey's own generic IT-helpdesk default); a deployment that
+    // dispatches field workers off a map pin (uhh's animal-health domain)
+    // opts in via persona.locationConfirmNudge.
+    ...(caseRow.location_source === 'estimated' && persona.locationConfirmNudge ? [persona.locationConfirmNudge] : []),
     ``,
     `KEEP REPORTS CORRECTLY GROUPED: one conversation usually means one report.`,
     `For a clearly different situation (different animals/place), call case_new --`,

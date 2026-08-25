@@ -23,22 +23,34 @@ function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function mapMarkerIcon(statusTok) {
+function mapMarkerIcon(statusTok, locationSource) {
     // statusTok is the token name (e.g., '--sky', '--amber') from STATUS_TOKEN
-    // Set it as a CSS variable on the marker div so CSS can use var()
+    // Set it as a CSS variable on the marker div so CSS can use var(). Color
+    // (status) stays the primary signal; location_source ('gps'/'estimated'/
+    // 'confirmed'/'unset') is a secondary border treatment via a data
+    // attribute (app.css), so an operator sees at a glance whether a pin is
+    // a surveyed-exact position or still the agent's own unconfirmed guess,
+    // without the two dimensions competing for the same fill color.
     return window.L.divIcon({
         className: 'ds-map-marker-icon',
-        html: `<div class="ds-map-marker-dot" data-status-token="${statusTok}"></div>`,
+        html: `<div class="ds-map-marker-dot" data-status-token="${statusTok}" data-location-source="${locationSource || 'unset'}"></div>`,
         iconSize: [14, 14],
     });
 }
 
+// location_source -> a short, honest label for the popup. 'unset' (a case
+// predating this field) says nothing rather than implying a false certainty
+// either way.
+const LOCATION_SOURCE_LABEL = { gps: 'exact GPS', estimated: 'estimated, unconfirmed', confirmed: 'estimated, confirmed by worker' };
+
 function mapPopupHtml(p) {
     const counts = [p.affected_count != null ? p.affected_count + ' affected' : '', p.dead_count != null ? p.dead_count + ' dead' : ''].filter(Boolean).join(', ');
+    const locSrcLabel = LOCATION_SOURCE_LABEL[p.location_source];
     return `<div><b>${esc(p.ref)}</b> <span class="ds-map-popup-status">${esc(p.status)}</span><br>`
         + (p.species ? esc(p.species) + '<br>' : '')
         + (p.case_type && p.case_type !== 'unset' ? esc(p.case_type) + '<br>' : '')
         + (p.location ? esc(p.location) + '<br>' : '')
+        + (locSrcLabel ? `<span class="ds-map-popup-location-source" data-location-source="${esc(p.location_source)}" title="Where this map pin's coordinate came from">pin: ${esc(locSrcLabel)}</span><br>` : '')
         + (p.symptoms ? '<span title="As reported/observed">symptoms: ' + esc(p.symptoms) + '</span><br>' : '')
         + (counts ? esc(counts) + '<br>' : '')
         + (p.onset ? 'onset: ' + esc(p.onset) + '<br>' : '')
@@ -62,7 +74,7 @@ function renderMapMarkers(mapState, filters) {
     const filtered = applyMapFilters(mapState.pins, filters);
     const layer = window.L.markerClusterGroup({ maxClusterRadius: 40 });
     for (const p of filtered) {
-        const m = window.L.marker([p.lat, p.lon], { icon: mapMarkerIcon(STATUS_TOKEN[p.status] || '--fg-3') });
+        const m = window.L.marker([p.lat, p.lon], { icon: mapMarkerIcon(STATUS_TOKEN[p.status] || '--fg-3', p.location_source) });
         m.bindPopup(mapPopupHtml(p));
         m.on('popupopen', () => {
             const el = document.querySelector(`[data-open-ref="${p.id}"]`);

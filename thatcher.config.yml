@@ -120,6 +120,17 @@ entities:
       last_event_at: { type: text }
       lat:         { type: number }                  # site location for proximity (multi-site orgs); optional
       lon:         { type: number }
+      location_source: { type: enum, options: [unset, gps, estimated, confirmed], default: unset }
+                                                     # provenance of lat/lon: gps = the contact read out exact
+                                                     # coordinates; estimated = the agent's own best-effort guess
+                                                     # from a place name, not yet confirmed back to the contact;
+                                                     # confirmed = an estimate the agent voiced back ("I think you
+                                                     # mean X, near Y -- is that right?") and the contact agreed
+                                                     # to, or corrected into a still-estimated-but-refined guess.
+                                                     # Distinguishes a pin an operator can trust from one that is
+                                                     # still just the model's own guess -- see case-tools.js's
+                                                     # case_report handler and hooks/prompt.js's location-confirm
+                                                     # nudge (persona.locationConfirmNudge, optional per config).
       claimed_at:  { type: text }                    # when a technician claimed/assigned themselves (enquiry flow)
       # Derived-only fields: computed FROM other fields by casey's own system
       # code, never hand-typed by a contact/worker/operator and never agent-

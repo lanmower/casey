@@ -402,7 +402,19 @@ body { background: var(--bg); color: var(--fg); }
 .ds-map-marker-dot[data-status-token="--green"] { background: var(--green); }
 .ds-map-marker-dot[data-status-token="--purple-2"] { background: var(--purple-2); }
 .ds-map-marker-dot[data-status-token="--fg-3"] { background: var(--fg-3); }
+/* Location provenance -- fill color (above) stays the status signal;
+   border treatment carries whether the pin is a surveyed-exact position or
+   still the agent's own unconfirmed guess. 'unset'/'confirmed'/'gps' keep
+   the default solid border (settled positions read the same); 'estimated'
+   alone gets a dashed, dimmer border so an operator can tell at a glance
+   this pin has not been checked with the worker yet. */
+.ds-map-marker-dot[data-location-source="estimated"] {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--paper) 50%, transparent);
+}
 .ds-map-popup-status { color: var(--fg-2); }
+.ds-map-popup-location-source { color: var(--fg-2); font-size: 0.9em; }
+.ds-map-popup-location-source[data-location-source="estimated"] { color: var(--amber); }
 
 @container (max-width: 640px) {
   .ds-map-wrap, .map-wrap, .ds-map-canvas { height: min(55vh, 420px); }

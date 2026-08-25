@@ -70,6 +70,13 @@ export function registerMap(app, deps) {
         assignee: c.assignee || null, priority: c.priority,
         cluster: clusterByRef.has(c.ref) ? clusterByRef.get(c.ref) : null,
         last_event_at: c.last_event_at,
+        // gps = the contact read out exact coordinates; estimated = the
+        // agent's own guess from a place name, not yet confirmed with them;
+        // confirmed = an estimate they agreed to or refined; unset = a case
+        // pre-dating this field. The map pin (client script) renders these
+        // distinctly so an operator never mistakes a still-unconfirmed guess
+        // for a surveyed exact position.
+        location_source: c.location_source || 'unset',
       }
       if (lat != null && Number.isFinite(lat) && lon != null && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
         pins.push({ ...row, lat, lon })
