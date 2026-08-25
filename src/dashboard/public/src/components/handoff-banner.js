@@ -23,7 +23,20 @@ function rememberHandoff(id) {
 
 const hasHandoff = (c) => String(c.tags || '').split(',').map(s => s.trim()).includes('needs-human');
 
-const baseTitle = (typeof document !== 'undefined') ? document.title : 'casey';
+// Captured once at module-eval time (page load) -- NOT a live read of
+// document.title on every countTitle() call, since setInboxBadge/flashTitle
+// themselves write document.title and would otherwise capture their own
+// prior write as the new "base" on the next tick. setBaseTitle() is the
+// deliberate, single update path: main.js's loadCaseyConfig() calls it once
+// dashboard_ui.brand is known (config isn't available yet at this module's
+// own eval time, only after an async fetch resolves), so a config-driven
+// brand and this module's own inbox-count-badge/flash-title logic can
+// coexist without one stomping the other.
+let baseTitle = (typeof document !== 'undefined') ? document.title : 'casey';
+export function setBaseTitle(title) {
+  baseTitle = title;
+  if (!titleTimer) document.title = countTitle();
+}
 let titleFlip = false, titleTimer = null, inboxCount = 0;
 function countTitle() { return inboxCount > 0 ? '(' + inboxCount + ') ' + baseTitle : baseTitle; }
 export function setInboxBadge(n) {

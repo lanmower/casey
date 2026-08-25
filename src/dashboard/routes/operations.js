@@ -9,7 +9,7 @@
 //   runtimeStatus, queueStatus, alertWebhookUrl
 import { tagList } from '../../timestamp.js'
 import { calculateDegradationRate } from '../../degraded-turns.js'
-import { REPORT_ENTITY_LABEL, REPORT_SECTIONS, CRITICAL_FIELDS, SEVERITY_SIGNAL_FIELDS, fieldLabel } from '../../store/report-shape.js'
+import { REPORT_ENTITY_LABEL, REPORT_SECTIONS, CRITICAL_FIELDS, SEVERITY_SIGNAL_FIELDS, fieldLabel, DASHBOARD_UI } from '../../store/report-shape.js'
 
 export function registerOperations(app, deps) {
   const {
@@ -301,6 +301,12 @@ export function registerOperations(app, deps) {
       // already gives for the on-site-visit guardrail. Empty array when the
       // active config declares none (casey's own generic default).
       severity_signal_fields: SEVERITY_SIGNAL_FIELDS.map(k => ({ key: k, label: fieldLabel(k) })),
+      // Dashboard shell shape (brand/leaf + which sidebar nav items to
+      // hide/relabel) -- see report-shape.js's DASHBOARD_UI. null when the
+      // active config declares none (casey's own default, uhh), in which
+      // case app-view.js/nav-config.js fall back to their own hardcoded
+      // literals -- byte-identical to before this existed.
+      dashboard_ui: DASHBOARD_UI,
     })
   }))
 

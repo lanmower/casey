@@ -77,6 +77,17 @@ export function deriveReportShape(reportFields) {
     return order.map(title => ({ title, keys: bySection.get(title) }))
   })()
 
+  // Dashboard shell shape (brand name + which sidebar nav items to keep/
+  // relabel), config-driven for the SAME reason report-field vocabulary is:
+  // a deployer whose domain has no "Map"/"Hotspots"/"Reporters" concept
+  // (e.g. serpent's research-run tracking) can drop or relabel those nav
+  // items via config instead of casey's SPA staying hardcoded to one
+  // domain's field-ops vocabulary forever. Absent entirely (casey's own
+  // default, uhh) -- DASHBOARD_UI is null, and every consumer (app-view.js,
+  // nav-config.js) falls back to today's exact hardcoded labels/full item
+  // set, so this is purely additive.
+  const DASHBOARD_UI = reportFields.dashboard_ui || null
+
   return {
     REPORT_KEYS, REPORT_KEY_ORDER, CRITICAL_FIELDS, APPEND_FIELDS, NEVER_INFERRED_FIELDS,
     SEVERITY_SIGNAL_FIELDS,
@@ -86,6 +97,7 @@ export function deriveReportShape(reportFields) {
     REPORT_TOOL_DESCRIPTION: reportFields.tool_description || '',
     REPORT_FIELD_DEFS: reportFields.fields,
     REPORT_GEO_FIELD_DEFS: reportFields.geo_fields || [],
+    DASHBOARD_UI,
   }
 }
 
@@ -106,3 +118,4 @@ export const REPORT_TOOL_NAME = _default.REPORT_TOOL_NAME
 export const REPORT_TOOL_DESCRIPTION = _default.REPORT_TOOL_DESCRIPTION
 export const REPORT_FIELD_DEFS = _default.REPORT_FIELD_DEFS
 export const REPORT_GEO_FIELD_DEFS = _default.REPORT_GEO_FIELD_DEFS
+export const DASHBOARD_UI = _default.DASHBOARD_UI

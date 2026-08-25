@@ -60,9 +60,17 @@ function MainContent() {
 export function App() {
   if (!state.authed) return LoginGate();
 
+  // brand/leaf are config-driven (dashboard_ui.brand/dashboard_ui.leaf, see
+  // report-shape.js's DASHBOARD_UI, threaded through /api/config) so a
+  // deployer whose domain isn't "casey"/"Cases" (e.g. serpent's research
+  // runs) can rebrand the app shell without a fork. Absent (casey's own
+  // default, uhh) -- falls back to today's exact literals.
+  const brand = state.config?.dashboard_ui?.brand || 'casey';
+  const leaf = state.config?.dashboard_ui?.leaf || 'Cases';
+
   const side = Side({ sections: buildSideSections({}) });
   const topbar = Topbar({
-    brand: 'casey', leaf: 'Cases',
+    brand, leaf,
     items: [], themeToggle: false,
   });
   const crumbRight = [
@@ -72,7 +80,7 @@ export function App() {
     IconButton({ icon: Icon('help'), title: 'What does this screen mean?', onClick: () => openModal('help') }),
     AccountMenu(),
   ].filter(Boolean);
-  const crumb = Crumb({ leaf: 'Cases', right: crumbRight });
+  const crumb = Crumb({ leaf, right: crumbRight });
   const status = Status({ left: [], right: [] });
 
   return h('div', { class: 'ds-app-root' },

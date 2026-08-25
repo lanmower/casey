@@ -12,7 +12,7 @@ import { initRouteSync, applyRouteToState, currentRoute, closeCaseRoute } from '
 import { applyView, decodeView } from './saved-views.js';
 import { initTheme } from './components/account-menu.js';
 import * as api from './api.js';
-import { checkHandoffs, setInboxBadge } from './components/handoff-banner.js';
+import { checkHandoffs, setInboxBadge, setBaseTitle } from './components/handoff-banner.js';
 import { registerRefreshAll, registerOpenIntakeNew } from './views/nav-config.js';
 import { openCase, closeCase, reloadCases as reloadCaseListRows, promptNewCase } from './views/case-list-detail-layout.js';
 
@@ -120,7 +120,26 @@ function maybeShowOnboarding() {
 }
 
 async function loadCaseyConfig() {
-  try { setConfig(await api.fetchConfig()); } catch { /* fall back to shipped defaults already in state */ }
+  try {
+    const cfg = await api.fetchConfig();
+    setConfig(cfg);
+    // index.html's <title>/manifest are static (served before any JS runs,
+    // no server-side templating) -- update the live tab title here so a
+    // deployer's dashboard_ui.brand (e.g. serpent's research-run branding)
+    // shows in the browser tab too, not just the in-app Topbar/Crumb.
+    // Absent dashboard_ui -- leaves the static "casey - cases" title alone.
+    // MUST go through handoff-banner.js's setBaseTitle(), never a direct
+    // document.title= here -- that module captures document.title into its
+    // own frozen baseTitle constant at ITS OWN module-eval time (page load,
+    // before this async fetch resolves) and its inbox-badge/title-flash
+    // logic overwrites document.title from that frozen value on every
+    // refresh, silently reverting any direct assignment made here. Live-
+    // witnessed: a direct document.title= here appeared to work for one
+    // instant then reverted to "casey - cases" on the next badge/poll tick.
+    const brand = cfg?.dashboard_ui?.brand;
+    const leaf = cfg?.dashboard_ui?.leaf;
+    if (brand || leaf) setBaseTitle(`${brand || 'casey'} - ${(leaf || 'cases').toLowerCase()}`);
+  } catch { /* fall back to shipped defaults already in state */ }
 }
 
 async function loadCases() {
@@ -157,7 +176,17 @@ async function refreshDegradedTurns() {
 }
 
 export async function refreshAll() {
-  await Promise.all([loadCases(), refreshAttention(), refreshHealth(), refreshDegradedTurns()]);
+  // loadCaseyConfig() runs here too, not just in boot() -- a login that
+  // happens after the pre-login boot attempt's own /api/config call failed
+  // (401/403, e.g. the bootstrap-admin must-change-password gate) left
+  // state.config stuck at its pre-login value (null/shipped defaults)
+  // forever, since login-gate.js's post-login refresh only ever called this
+  // function, never loadCaseyConfig() directly -- so dashboard_ui/
+  // report_sections/entity_label never repopulated after a login that
+  // followed a failed pre-login config fetch. Live-witnessed: a fresh
+  // bootstrap-admin session showed casey's raw hardcoded nav/branding even
+  // with a real dashboard_ui config, until this ran again post-login.
+  await Promise.all([loadCaseyConfig(), loadCases(), refreshAttention(), refreshHealth(), refreshDegradedTurns()]);
 }
 registerRefreshAll(refreshAll);
 

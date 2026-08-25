@@ -33,39 +33,46 @@ export async function runSweep() {
 
 export function toggleInboxMode() { setInboxMode(!state.inboxMode); }
 
-export function buildSideSections({ clustersCount = 0, offlineCount = 0, refreshAll } = {}) {
+// Every item carries a stable `key` (independent of its display `label`) so
+// dashboard_ui.nav config (see report-shape.js's DASHBOARD_UI, threaded
+// through /api/config) can hide/relabel specific items without the config
+// package needing to match against a label string that might itself be
+// relabeled. Casey's own default/uhh declare no dashboard_ui, so
+// applyNavConfig (below) is a no-op and every item/group renders exactly as
+// before this existed.
+function rawSideSections({ clustersCount = 0, offlineCount = 0, refreshAll } = {}) {
   return [
     {
       group: 'Primary',
       items: [
-        { glyph: Icon('plus', { size: 15 }), label: 'New case', onClick: openIntakeNew, ariaLabel: 'Add a case manually' },
-        { glyph: Icon('download', { size: 15 }), label: 'Export', href: '/api/cases/export.csv' },
-        { glyph: Icon('refresh', { size: 15 }), label: 'Sweep now', onClick: runSweep, ariaLabel: 'Run health-guardrail sweep now' },
-        { glyph: Icon('activity', { size: 15 }), label: 'Focus', onClick: toggleInboxMode, active: state.inboxMode },
-        { glyph: Icon('refresh', { size: 15 }), label: 'Refresh', onClick: refreshAll || _refreshAll },
+        { key: 'new_case', glyph: Icon('plus', { size: 15 }), label: 'New case', onClick: openIntakeNew, ariaLabel: 'Add a case manually' },
+        { key: 'export', glyph: Icon('download', { size: 15 }), label: 'Export', href: '/api/cases/export.csv' },
+        { key: 'sweep', glyph: Icon('refresh', { size: 15 }), label: 'Sweep now', onClick: runSweep, ariaLabel: 'Run health-guardrail sweep now' },
+        { key: 'focus', glyph: Icon('activity', { size: 15 }), label: 'Focus', onClick: toggleInboxMode, active: state.inboxMode },
+        { key: 'refresh', glyph: Icon('refresh', { size: 15 }), label: 'Refresh', onClick: refreshAll || _refreshAll },
       ],
     },
     {
       group: 'Reports & Admin',
       items: [
-        { glyph: Icon('activity', { size: 15 }), label: 'Stats', onClick: () => openModal('stats') },
-        { glyph: Icon('settings', { size: 15 }), label: 'Settings', onClick: () => openModal('settings') },
-        { glyph: Icon('page', { size: 15 }), label: 'Metrics', onClick: () => openPanel('metrics'), active: state.activePanel === 'metrics' },
-        { glyph: Icon('link', { size: 15 }), label: 'Related reports', onClick: () => openPanel('clusters'), active: state.activePanel === 'clusters', count: clustersCount },
-        { glyph: Icon('grid', { size: 15 }), label: 'Distribution', onClick: () => openPanel('distribution'), active: state.activePanel === 'distribution' },
-        { glyph: Icon('hash', { size: 15 }), label: 'Hotspots', onClick: () => openPanel('geo'), active: state.activePanel === 'geo' },
-        { glyph: Icon('folder', { size: 15 }), label: 'Map', onClick: () => openPanel('map'), active: state.activePanel === 'map' },
-        { glyph: Icon('thread', { size: 15 }), label: 'Activity', onClick: () => openPanel('activity'), active: state.activePanel === 'activity' },
-        { glyph: Icon('external-link', { size: 15 }), label: 'Shift handover', onClick: () => openPanel('handover'), active: state.activePanel === 'handover' },
-        { glyph: Icon('warn', { size: 15 }), label: 'Missed while offline', onClick: () => openPanel('offline'), active: state.activePanel === 'offline', count: offlineCount, color: offlineCount ? 'var(--warn, #d98a00)' : undefined },
+        { key: 'stats', glyph: Icon('activity', { size: 15 }), label: 'Stats', onClick: () => openModal('stats') },
+        { key: 'settings', glyph: Icon('settings', { size: 15 }), label: 'Settings', onClick: () => openModal('settings') },
+        { key: 'metrics', glyph: Icon('page', { size: 15 }), label: 'Metrics', onClick: () => openPanel('metrics'), active: state.activePanel === 'metrics' },
+        { key: 'clusters', glyph: Icon('link', { size: 15 }), label: 'Related reports', onClick: () => openPanel('clusters'), active: state.activePanel === 'clusters', count: clustersCount },
+        { key: 'distribution', glyph: Icon('grid', { size: 15 }), label: 'Distribution', onClick: () => openPanel('distribution'), active: state.activePanel === 'distribution' },
+        { key: 'geo', glyph: Icon('hash', { size: 15 }), label: 'Hotspots', onClick: () => openPanel('geo'), active: state.activePanel === 'geo' },
+        { key: 'map', glyph: Icon('folder', { size: 15 }), label: 'Map', onClick: () => openPanel('map'), active: state.activePanel === 'map' },
+        { key: 'activity', glyph: Icon('thread', { size: 15 }), label: 'Activity', onClick: () => openPanel('activity'), active: state.activePanel === 'activity' },
+        { key: 'handover', glyph: Icon('external-link', { size: 15 }), label: 'Shift handover', onClick: () => openPanel('handover'), active: state.activePanel === 'handover' },
+        { key: 'offline', glyph: Icon('warn', { size: 15 }), label: 'Missed while offline', onClick: () => openPanel('offline'), active: state.activePanel === 'offline', count: offlineCount, color: offlineCount ? 'var(--warn, #d98a00)' : undefined },
       ],
     },
     {
       group: 'Team',
       items: [
-        { glyph: Icon('members', { size: 15 }), label: 'Team workload', onClick: () => openPanel('team'), active: state.activePanel === 'team' },
-        { glyph: Icon('members', { size: 15 }), label: 'Reporters', onClick: () => openPanel('contacts'), active: state.activePanel === 'contacts' },
-        { glyph: Icon('external-link', { size: 15 }), label: 'Follow-up calls', onClick: () => openPanel('secretary'), active: state.activePanel === 'secretary' },
+        { key: 'team', glyph: Icon('members', { size: 15 }), label: 'Team workload', onClick: () => openPanel('team'), active: state.activePanel === 'team' },
+        { key: 'contacts', glyph: Icon('members', { size: 15 }), label: 'Reporters', onClick: () => openPanel('contacts'), active: state.activePanel === 'contacts' },
+        { key: 'secretary', glyph: Icon('external-link', { size: 15 }), label: 'Follow-up calls', onClick: () => openPanel('secretary'), active: state.activePanel === 'secretary' },
       ],
     },
     {
@@ -73,6 +80,30 @@ export function buildSideSections({ clustersCount = 0, offlineCount = 0, refresh
       items: [],
     },
   ];
+}
+
+// Applies dashboard_ui.nav's hide/relabel/group_labels (see /api/config's
+// nav field) over the raw hardcoded sections above. `hide` is a flat array
+// of item keys to drop (an emptied group is dropped too, so a config that
+// hides every item in "Team" doesn't leave a headerless empty group).
+// `relabel` is {key: newLabel}. `group_labels` is {oldGroupName: newGroupName}.
+// Absent config (casey's own default, uhh) -- returns the raw sections
+// unchanged.
+function applyNavConfig(sections, navConfig) {
+  if (!navConfig) return sections;
+  const hide = new Set(navConfig.hide || []);
+  const relabel = navConfig.relabel || {};
+  const groupLabels = navConfig.group_labels || {};
+  return sections
+    .map(sec => ({
+      group: groupLabels[sec.group] || sec.group,
+      items: sec.items.filter(it => !hide.has(it.key)).map(it => relabel[it.key] ? { ...it, label: relabel[it.key] } : it),
+    }))
+    .filter(sec => sec.items.length > 0 || sec.group === 'Account');
+}
+
+export function buildSideSections(opts = {}) {
+  return applyNavConfig(rawSideSections(opts), state.config?.dashboard_ui?.nav);
 }
 
 export function backToCases() { closePanel(); }

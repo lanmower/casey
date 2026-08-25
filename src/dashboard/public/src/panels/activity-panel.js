@@ -16,7 +16,14 @@ import { eventIcon, eventTone } from '../icons-map.js';
 const h = webjsx.createElement;
 
 const ACT_KIND_LABEL = { inbound: 'Inbound', outbound: 'Reply', transition: 'Stage change', note: 'Note', observation: 'Note', action: 'Action', autonomy_change: 'Autonomy' };
-const ACT_ACTOR_LABEL = { agent: 'casey', operator: 'Operator', contact: 'Contact', system: 'System' };
+// Config-driven brand label for the 'agent' actor (dashboard_ui.brand, same
+// fallback as app-view.js/case-list-view.js) -- a function, not a module-
+// level constant, since state.config isn't populated yet at module-eval
+// time. Casey's own default and uhh declare no dashboard_ui, so this stays
+// the literal 'casey' for them.
+function actorLabels() {
+  return { agent: state.config?.dashboard_ui?.brand || 'casey', operator: 'Operator', contact: 'Contact', system: 'System' };
+}
 
 let loading = false, error = null;
 let filters = { kind: '', actor: '' };
@@ -35,7 +42,7 @@ function ActivityRow(e, i) {
         h('div', { class: 'ds-activity-body' },
             h('div', { class: 'ds-activity-top' },
                 Chip({ tone: eventTone(e.kind), size: 'sm', children: ACT_KIND_LABEL[e.kind] || e.kind }),
-                h('span', { class: 'ds-activity-who' }, ACT_ACTOR_LABEL[e.actor] || e.actor || ''),
+                h('span', { class: 'ds-activity-who' }, actorLabels()[e.actor] || e.actor || ''),
                 h('span', { class: 'ds-activity-when', title: fmtTime(e.created_at) }, rel(e.created_at))),
             (e.text || '').trim() ? h('div', { class: 'ds-activity-text' }, (e.text || '').slice(0, 200)) : null));
 }
@@ -62,7 +69,7 @@ export function ActivityPanel() {
         }),
         Select({
             key: 'a', placeholder: 'all actors', value: filters.actor,
-            options: Object.entries(ACT_ACTOR_LABEL).map(([id, label]) => ({ id, label })),
+            options: Object.entries(actorLabels()).map(([id, label]) => ({ id, label })),
             onChange: (v) => { filters.actor = v; load(); },
         }));
     let body;

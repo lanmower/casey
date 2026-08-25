@@ -60,7 +60,10 @@ export function CaseListView({ onOpenIntake, onPromptTag, onPromptNote, onReload
 
   return h('div', { class: 'case-list-view' },
     h('div', { key: 'head', class: 'case-list-head' },
-      Heading({ level: 1, children: 'casey' }),
+      // Config-driven brand (dashboard_ui.brand, see app-view.js's own
+      // Topbar/Crumb wiring for the same fallback) -- casey's own default
+      // and uhh declare none, so this stays the literal 'casey' for them.
+      Heading({ level: 1, children: state.config?.dashboard_ui?.brand || 'casey' }),
       CountsLine()
     ),
     FiltersBar({
