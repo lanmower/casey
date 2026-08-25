@@ -9,11 +9,12 @@
 // `now` is passed in (never read from the clock here) so the score is a pure
 // function of (case, now) -- testable and identical on every caller.
 
-// tagList/tsMs moved to timestamp.js (one shared implementation, was
+// tagList/tsMs/parseReport moved to timestamp.js (one shared implementation, was
 // independently duplicated here/case-health.js/case-sweep.js).
-import { tsMs, tagList } from './timestamp.js'
+import { tsMs, tagList, parseReport } from './timestamp.js'
 import { healthTag } from './case-health.js'
 import { OPTED_OUT_TAG } from './hooks/heuristics.js'
+import { SEVERITY_SIGNAL_FIELDS } from './store/report-shape.js'
 
 // Age in hours from the last-touch timestamp, relative to `now`. Tolerates a
 // missing/corrupt timestamp (returns 0 -- a brand-new or unparseable case is not
@@ -147,6 +148,21 @@ function attnScore(c, now = Date.now()) {
   // createCase/_findOrCreateCaseUnsafe/splitCase), so it reflects who was
   // actually on-site relaying the report, not a contact's current tier.
   if (c.reporter_tier === 'field_worker') s += 5
+  // A config-declared severity-signal field (report-fields.yml's
+  // severity_signal flag, e.g. an animal-health deployment's dead_count) that
+  // the reporter has ALREADY given a non-empty value for -- surfacing a
+  // stated fact, never an inference about what it means (no LLM involved,
+  // same "deterministic, enum-derived; no LLM" contract this whole module
+  // keeps). Deliberately below every tag-based health/handoff signal (10-100)
+  // but above the field_worker tiebreak: a report already carrying a
+  // severity-signal fact should not out-rank a genuine needs-human ask, but
+  // should surface ahead of an equally-fresh report that carries no such
+  // fact. No default fields ship set -- a deployment opts specific report
+  // fields in via report-fields.yml; this is a no-op until one does.
+  if (SEVERITY_SIGNAL_FIELDS.length) {
+    const rep = parseReport(c)
+    if (SEVERITY_SIGNAL_FIELDS.some(k => rep[k] != null && String(rep[k]).trim() !== '')) s += 7
+  }
   s += Math.min(20, Math.floor(ageHours(c, now)))
   return s
 }

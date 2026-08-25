@@ -9,7 +9,7 @@
 //   runtimeStatus, queueStatus, alertWebhookUrl
 import { tagList } from '../../timestamp.js'
 import { calculateDegradationRate } from '../../degraded-turns.js'
-import { REPORT_ENTITY_LABEL, REPORT_SECTIONS, CRITICAL_FIELDS, fieldLabel } from '../../store/report-shape.js'
+import { REPORT_ENTITY_LABEL, REPORT_SECTIONS, CRITICAL_FIELDS, SEVERITY_SIGNAL_FIELDS, fieldLabel } from '../../store/report-shape.js'
 
 export function registerOperations(app, deps) {
   const {
@@ -295,6 +295,12 @@ export function registerOperations(app, deps) {
       entity_label: REPORT_ENTITY_LABEL,
       report_sections: REPORT_SECTIONS,
       visit_critical: CRITICAL_FIELDS.map(k => ({ key: k, label: fieldLabel(k) })),
+      // Which report fields nudge a case's attnScore (attn.js) when the
+      // reporter has already given them a non-empty value -- so an operator
+      // can see WHY a case surfaced sooner, same transparency visit_critical
+      // already gives for the on-site-visit guardrail. Empty array when the
+      // active config declares none (casey's own generic default).
+      severity_signal_fields: SEVERITY_SIGNAL_FIELDS.map(k => ({ key: k, label: fieldLabel(k) })),
     })
   }))
 

@@ -35,6 +35,19 @@ export function deriveReportShape(reportFields) {
   // never case-health.js.
   const CRITICAL_FIELDS = reportFields.fields.filter(f => f.critical_for_visit).map(f => f.key)
 
+  // Fields whose PRESENCE (a non-empty value the reporter already gave --
+  // never an LLM inference about severity) nudges a case's attnScore
+  // (attn.js) so it surfaces sooner in the operator inbox. Deliberately the
+  // same shape as CRITICAL_FIELDS/NEVER_INFERRED_FIELDS: a per-field config
+  // flag, never a hardcoded domain literal, so this stays meaningful under
+  // any deployed report-fields.yml (e.g. a deployer's dead_count/affected_count
+  // for an animal-health domain, or a blocking_work-style field for an
+  // IT-helpdesk one) and is a no-op (empty array) when no field opts in, as
+  // casey's own generic default does. This is presenting an already-stated
+  // fact back to a human, never an assertion about what it means -- attn.js
+  // reads only whether the field is present/non-empty, never its content.
+  const SEVERITY_SIGNAL_FIELDS = reportFields.fields.filter(f => f.severity_signal).map(f => f.key)
+
   // Fields that APPEND on every write rather than overwrite.
   const APPEND_FIELDS = new Set(reportFields.fields.filter(f => f.append).map(f => f.key))
 
@@ -66,6 +79,7 @@ export function deriveReportShape(reportFields) {
 
   return {
     REPORT_KEYS, REPORT_KEY_ORDER, CRITICAL_FIELDS, APPEND_FIELDS, NEVER_INFERRED_FIELDS,
+    SEVERITY_SIGNAL_FIELDS,
     ENQUIRY_HEADLINE_FIELDS, FIELD_LABELS, fieldLabel, REPORT_SECTIONS,
     REPORT_ENTITY_LABEL: reportFields.entity_label || 'report',
     REPORT_TOOL_NAME: reportFields.tool_name || 'case_report',
@@ -82,6 +96,7 @@ export const REPORT_KEY_ORDER = _default.REPORT_KEY_ORDER
 export const CRITICAL_FIELDS = _default.CRITICAL_FIELDS
 export const APPEND_FIELDS = _default.APPEND_FIELDS
 export const NEVER_INFERRED_FIELDS = _default.NEVER_INFERRED_FIELDS
+export const SEVERITY_SIGNAL_FIELDS = _default.SEVERITY_SIGNAL_FIELDS
 export const ENQUIRY_HEADLINE_FIELDS = _default.ENQUIRY_HEADLINE_FIELDS
 export const FIELD_LABELS = _default.FIELD_LABELS
 export const fieldLabel = _default.fieldLabel
