@@ -40,6 +40,16 @@ async function rosterFromAccounts(store) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CASEY_PLUGINS = path.resolve(__dirname, '..', 'plugins')
+// A deployer package (e.g. serpent) can register its OWN casey-toolset
+// plugins -- tools that need to be visible under enabledToolsets:['cases']
+// (the contact-facing agent's hardcoded, deliberately narrow toolset, see
+// this file's init() below) without casey itself knowing anything about
+// that domain's tools. CASEY_EXTRA_PLUGINS_DIR is a deployer-set env var
+// (same discipline as CASEY_CONFIG_DIR: never contact-influenced, only ever
+// set by whoever starts the process), pointing at an additional plugin root
+// bootHost discovers alongside casey's own plugins/ -- additive, never a
+// replacement. Absent, behavior is byte-identical to before this existed.
+const CASEY_EXTRA_PLUGINS = process.env.CASEY_EXTRA_PLUGINS_DIR ? path.resolve(process.env.CASEY_EXTRA_PLUGINS_DIR) : null
 // freddie's package "exports" map blocks subpath imports, so we reach its
 // platform adapter classes by absolute path under node_modules.
 const FREDDIE_ROOT = path.resolve(__dirname, '..', 'node_modules', 'freddie')
@@ -89,10 +99,11 @@ export class Casey {
     await this.store.init()
     setCaseStore(this.store)
 
-    // 2) boot freddie host with casey's plugin root so case_* tools register.
-    //    bootHost is memoised; doing it here means freddie's later internal
-    //    bootHost() calls reuse this fully-loaded host.
-    await bootHost([CASEY_PLUGINS])
+    // 2) boot freddie host with casey's plugin root (+ a deployer's own
+    //    extra plugin root, if CASEY_EXTRA_PLUGINS_DIR is set) so case_* tools
+    //    register. bootHost is memoised; doing it here means freddie's later
+    //    internal bootHost() calls reuse this fully-loaded host.
+    await bootHost(CASEY_EXTRA_PLUGINS ? [CASEY_PLUGINS, CASEY_EXTRA_PLUGINS] : [CASEY_PLUGINS])
 
     // 3) build adapters for the requested channels.
     const platforms = {}
