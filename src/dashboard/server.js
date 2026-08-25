@@ -68,22 +68,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // asset under it (live-witnessed: /design/dist/247420.css, /vendor/leaflet/*,
 // /design/src/bootstrap.js all 404/503'd in a real serpent deployment,
 // silently blanking the whole SPA since bootstrap.js never ran).
-function resolvePackageDir(pkgName, ...subpath) {
-  const entryUrl = import.meta.resolve(pkgName)
-  const entryPath = fileURLToPath(entryUrl)
-  // Walk up from the resolved entry file to the package root (the dir
-  // containing that package's own package.json), then append the subpath --
-  // entryPath is the package's `main`/`exports` target, not its root.
-  let dir = path.dirname(entryPath)
-  while (dir !== path.dirname(dir)) {
-    if (existsSync(path.join(dir, 'package.json'))) break
-    dir = path.dirname(dir)
-  }
-  return path.resolve(dir, ...subpath)
+//
+// import.meta.resolve() throws synchronously (ERR_MODULE_NOT_FOUND) when a
+// package is missing/partially installed -- an adversarial review caught
+// that an unguarded call here, at module top level, converts a per-route
+// 404 (the old hardcoded-path behavior: server boots fine, only that one
+// static subpath 404s) into a full boot-time crash of the entire
+// gateway+dashboard process. Falls back to the old hardcoded relative path
+// on any resolution failure, preserving the original graceful-degradation
+// shape while still fixing the real hoisting case this function exists for.
+function resolvePackageDir(pkgName, fallbackRelative, ...subpath) {
+  try {
+    const entryUrl = import.meta.resolve(pkgName)
+    const entryPath = fileURLToPath(entryUrl)
+    // Walk up from the resolved entry file to the package root (the dir
+    // containing that package's own package.json), then append the subpath
+    // -- entryPath is the package's `main`/`exports` target, not its root.
+    let dir = path.dirname(entryPath)
+    while (dir !== path.dirname(dir)) {
+      if (existsSync(path.join(dir, 'package.json'))) return path.resolve(dir, ...subpath)
+      dir = path.dirname(dir)
+    }
+  } catch { /* fall through to the legacy relative-path guess below */ }
+  return path.resolve(__dirname, '..', '..', 'node_modules', fallbackRelative, ...subpath)
 }
-const DESIGN_DIR = resolvePackageDir('anentrypoint-design')
-const LEAFLET_DIR = resolvePackageDir('leaflet', 'dist')
-const MARKERCLUSTER_DIR = resolvePackageDir('leaflet.markercluster', 'dist')
+const DESIGN_DIR = resolvePackageDir('anentrypoint-design', 'anentrypoint-design')
+const LEAFLET_DIR = resolvePackageDir('leaflet', 'leaflet', 'dist')
+const MARKERCLUSTER_DIR = resolvePackageDir('leaflet.markercluster', 'leaflet.markercluster', 'dist')
 const PUBLIC_DIR = path.resolve(__dirname, 'public')
 
 const OPERATOR = { id: 'dashboard-operator', role: 'operator' }

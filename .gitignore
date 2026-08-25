@@ -4,7 +4,6 @@ data/
 
 # channel tokens, dashboard secret -- scaffolded by `casey init`, never
 # committed (holds live WhatsApp/Discord credentials and CASEY_SESSION_SECRET)
-.env
 
 # scratchpad files a session writes at the repo root for local exploration
 # (adversarial test harnesses, verification probes) -- never committed, per
