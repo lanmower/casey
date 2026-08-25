@@ -95,11 +95,18 @@ function applyNavConfig(sections, navConfig) {
   const relabel = navConfig.relabel || {};
   const groupLabels = navConfig.group_labels || {};
   return sections
+    // The 'Account' survivor check (below) must match rawSideSections()'s
+    // own ORIGINAL group name, not a config-relabeled one -- an adversarial
+    // review caught that filtering on the already-renamed `sec.group` meant
+    // a group_labels entry targeting 'Account' (e.g. {Account: 'Profile'})
+    // would make the check `sec.group === 'Account'` false and silently
+    // drop the permanent placeholder group. Filter BEFORE renaming so the
+    // survivor check always sees the true original name.
+    .filter(sec => sec.items.filter(it => !hide.has(it.key)).length > 0 || sec.group === 'Account')
     .map(sec => ({
       group: groupLabels[sec.group] || sec.group,
       items: sec.items.filter(it => !hide.has(it.key)).map(it => relabel[it.key] ? { ...it, label: relabel[it.key] } : it),
-    }))
-    .filter(sec => sec.items.length > 0 || sec.group === 'Account');
+    }));
 }
 
 export function buildSideSections(opts = {}) {
