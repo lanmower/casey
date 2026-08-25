@@ -13,14 +13,37 @@
 //
 // Channels/port/llm come from argv flags the supervisor passes through verbatim.
 
+import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createCasey } from '../src/casey.js'
 import { createDashboard } from '../src/dashboard/server.js'
 import { WORKER_MSG, PARENT_MSG, ipcSend } from '../src/supervisor-ipc.js'
 import { caseDeliveryTarget } from '../src/hooks/handler.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// A deployer package (e.g. serpent) can mount its OWN routes directly onto
+// casey's real dashboard Express app -- same origin/port as the SPA and
+// every existing /api/* route, so a same-origin relative fetch from the SPA
+// can reach a deployer's own endpoint with zero proxy/second-port plumbing.
+// CASEY_EXTRA_DASHBOARD_ROUTES is a deployer-set env var (same discipline as
+// CASEY_CONFIG_DIR/CASEY_EXTRA_PLUGINS_DIR: never contact-influenced, only
+// ever set by whoever starts the process) naming a module whose default
+// export is `(app, {store}) => void`, called once after createDashboard
+// resolves and after every existing route module (including auth.js's
+// session-resolving middleware) is already registered -- so a mounted route
+// can rely on req.caseyAccount exactly like casey's own route modules do.
+// Validated eagerly, matching CASEY_EXTRA_PLUGINS_DIR's own fail-loud
+// discipline: a mistyped path throws a clear, named error at boot instead of
+// silently mounting nothing. Absent, dashboard boot is byte-identical to
+// before this existed.
+const CASEY_EXTRA_DASHBOARD_ROUTES = (() => {
+  if (!process.env.CASEY_EXTRA_DASHBOARD_ROUTES) return null
+  const p = path.resolve(process.env.CASEY_EXTRA_DASHBOARD_ROUTES)
+  if (!fs.existsSync(p)) throw new Error(`CASEY_EXTRA_DASHBOARD_ROUTES not found: ${p}`)
+  return p
+})()
 
 // Global crash net: Node's DEFAULT behavior for an unhandled rejection or a
 // synchronous uncaught exception ANYWHERE (a background timer, a fire-and-
@@ -244,6 +267,13 @@ async function main() {
     // into the budget (witnessed: 5x EADDRINUSE re-forks -> degraded with no clear
     // message when a stale worker held the port).
     process.exit(/EADDRINUSE/.test(String(e && e.message)) ? 44 : 1)
+  }
+
+  if (CASEY_EXTRA_DASHBOARD_ROUTES) {
+    const mod = await import(pathToFileURL(CASEY_EXTRA_DASHBOARD_ROUTES).href)
+    const mount = mod.default
+    if (typeof mount !== 'function') throw new Error(`CASEY_EXTRA_DASHBOARD_ROUTES module has no default export function: ${CASEY_EXTRA_DASHBOARD_ROUTES}`)
+    await mount(dash.app, { store: casey.store })
   }
 
   // Graceful drain shared by SIGINT (standalone) and PARENT_MSG.DRAIN (forked):

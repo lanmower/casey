@@ -99,6 +99,27 @@ same-named tool freddie's own repo had bundled under a different toolset
 the underlying primitive functions importable from freddie's own package
 root for a consumer to wrap under whichever toolset it needs).
 
+**`CASEY_EXTRA_DASHBOARD_ROUTES`** (deployer-set env var, same discipline as
+`CASEY_EXTRA_PLUGINS_DIR`) names a module whose default export is
+`(app, {store}) => void`, called by `bin/worker.js` once `createDashboard`
+resolves and every existing route module (including `auth.js`'s
+session-resolving middleware) is registered -- so a mounted route can rely
+on `req.caseyAccount` exactly like casey's own route modules do. `dash.app`
+is the real Express app `createDashboard` already resolves as part of
+`{app, server, port, close}`; the extension point exists because nothing
+before it ever exposed that reference to a deployer. Same origin/port as the
+dashboard SPA and every `/api/*` route -- the point of mounting here rather
+than a deployer running its own separate-port server is that the SPA's
+existing same-origin relative fetches (`src/dashboard/public/src/api.js`)
+can reach a deployer's own endpoint with zero proxy/second-port plumbing.
+Validated eagerly like `CASEY_EXTRA_PLUGINS_DIR`: a mistyped path throws a
+named error at boot. Absent, dashboard boot is byte-identical to before this
+existed. See `AnEntrypoint/serpent`'s `src/dashboard-routes.js` (mounted via
+`bin/serpent.js` setting this var before importing `casey/bin/casey.js`) for
+the reference implementation -- it replaced an earlier separate-port
+`createResearchServer` design that ran on its own Express app/port under a
+now-falsified assumption that `createDashboard` never exposed `app`.
+
 **Structural regression guards stay config-aware, not domain-hardcoded.**
 Both `hooks/prompt.js`'s `selfCheckLoadBearingPromptContent` and
 `case-tools.js`'s `selfCheckLoadBearingToolDescriptions` run at module load
@@ -371,6 +392,7 @@ from the name alone.
 | `CASEY_MEDIA_TOOL_TIMEOUT_MS` | The three media tool calls run before `turnStartedAt` is set, so without this timeout they sit entirely outside the turn hard-deadline and could hang the per-contact concurrency gate indefinitely. |
 | `CASEY_TRUST_PROXY_HOPS` | Unset means `req.ip` is the raw socket peer, so the public `/report` form's rate limiter sees every request behind a real proxy as the same address. Set too high/untrusted and a client can spoof `X-Forwarded-For` to bypass the limiter. |
 | `CASEY_MINE_SCAN_LIMIT` | Only bounds the fallback scan for legacy cases predating `author_key` (current cases scope via a real equality where-clause, not a scan). |
+| `CASEY_EXTRA_DASHBOARD_ROUTES` | Names a module (`(app, {store}) => void` default export) mounted onto the real dashboard Express app after `createDashboard` resolves and all of casey's own route modules register -- see the Configuration architecture section for the full contract. Unset means byte-identical dashboard boot to before this existed. |
 | `CASEY_MIN_AGGREGATE_CELL` | k-anonymity floor: a named bucket (channel/case_type/place) smaller than this is folded into `other/sparse` rather than shown by name -- naming the one place a rare report came from is close to naming the report itself. `unknown` is exempt since it names nothing to fold away. |
 | `CASEY_AUTO_UPDATE` | On by default: `casey up` fetches+ff-merges origin on an interval and hot-reloads the worker on the new code. Safe on a dirty/divergent dev tree -- `merge --ff-only` refuses and leaves the tree untouched. |
 | `CASEY_DRAIN_DEADLINE_MS` vs `CASEY_DRAIN_TURN_TIMEOUT_MS` | Two distinct drain timeouts -- the former bounds the supervisor's reload-time drain of the whole worker; the latter bounds `casey.js`'s own in-process `drain()` await used for shutdown/test determinism. |

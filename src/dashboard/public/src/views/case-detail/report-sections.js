@@ -18,8 +18,16 @@ const h = webjsx.createElement;
 // the active config package declares, instead of a hardcoded animal-health
 // field-label table. Empty array (config not yet fetched) renders no
 // sections rather than throwing.
-const reportSections = () => state.config?.report_sections || [];
-const visitCritical = () => (state.config?.visit_critical || []).map(f => [f.key, f.label]);
+//
+// state.runConfig (see fetchRunConfig/case-detail-view.js's loadCaseDetail)
+// is a per-case override for a deployment where concurrent cases can carry
+// genuinely different field vocabularies (e.g. serpent's per-run schema) --
+// it takes priority over the global state.config when set, and is null on a
+// plain casey/uhh deployment or before the per-case fetch resolves, in which
+// case this falls back to the global config exactly as before this existed.
+const activeConfig = () => state.runConfig || state.config;
+const reportSections = () => activeConfig()?.report_sections || [];
+const visitCritical = () => (activeConfig()?.visit_critical || []).map(f => [f.key, f.label]);
 
 const has = (r, k) => r[k] != null && String(r[k]).trim() !== '';
 
@@ -81,7 +89,7 @@ export function ReportSections({ c, events, onSaved, key } = {}) {
             srcVals.some(v => v === 'manual' || v === 'both') ? Chip({ size: 'sm', tone: 'ok', children: 'Operator entered' }) : null)
         : null;
 
-    const entityLabel = state.config?.entity_label || 'report';
+    const entityLabel = activeConfig()?.entity_label || 'report';
     return h('div', { key, class: 'casey-report' },
         h('div', { class: 'casey-report-head' }, `${entityLabel[0].toUpperCase()}${entityLabel.slice(1)} details`, any ? null : h('span', { class: 'casey-rep-missing' }, ' (nothing recorded yet)')),
         srcLegend, readyBanner, audioBanner,

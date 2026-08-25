@@ -41,6 +41,7 @@ export const state = {
 
   // Per-case-detail transient UI state (not persisted, reset on case switch)
   caseDetail: null,          // { case, events, transitions, events_total, report_fill_rate, suggested_assignee }
+  runConfig: null,           // per-case config override (entity_label/report_sections/visit_critical), null on a plain casey/uhh deployment or when the current case has no override -- see fetchRunConfig
   caseDetailLoading: false,
   caseDetailError: null,
   caseDetailEditingReport: false,
@@ -117,6 +118,7 @@ export function setOfflineQueueCount(n) { state.offlineQueueCount = n; schedule(
 export function setCaseDetailLoading(v) { state.caseDetailLoading = v; schedule(); }
 export function setCaseDetail(data) {
   state.caseDetail = data;
+  state.runConfig = null;
   state.caseDetailLoading = false;
   state.caseDetailError = null;
   state.caseDetailEditingReport = false;
@@ -128,6 +130,7 @@ export function setCaseDetailError(err) {
   state.caseDetailLoading = false;
   schedule();
 }
+export function setRunConfig(cfg) { state.runConfig = cfg; schedule(); }
 export function patchCaseDetailCase(patch) {
   if (state.caseDetail && state.caseDetail.case) Object.assign(state.caseDetail.case, patch);
   schedule();

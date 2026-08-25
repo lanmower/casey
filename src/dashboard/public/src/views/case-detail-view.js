@@ -10,8 +10,8 @@
 import * as webjsx from '/design/vendor/webjsx/index.js';
 import { Btn, IconButton, Icon } from '/design/src/components/shell.js';
 import { Skeleton } from '/design/src/components/content.js';
-import { state, schedule, setCaseDetail, setCaseDetailLoading, setCaseDetailError, setEditing } from '../state.js';
-import { fetchCase, postNote } from '../api.js';
+import { state, schedule, setCaseDetail, setCaseDetailLoading, setCaseDetailError, setEditing, setRunConfig } from '../state.js';
+import { fetchCase, fetchRunConfig, postNote } from '../api.js';
 import { toast, failMsg } from '../toasts.js';
 import { CaseHeader } from './case-detail/header.js';
 import { CaseProgress } from './case-detail/progress.js';
@@ -37,6 +37,11 @@ export async function loadCaseDetail(id) {
         _loadedFor = id;
         loadDuplicateSuggestions(id);
         loadSiteHistory(id);
+        // Best-effort per-run config override (see fetchRunConfig) -- resolves
+        // null on a plain casey/uhh deployment (no /api/runs/:id/config route)
+        // or a network failure, in which case report-sections.js falls back to
+        // the global config exactly as before this existed.
+        fetchRunConfig(id).then((cfg) => { if (state.activeId === id) setRunConfig(cfg); });
     } catch (e) {
         setCaseDetailError((e && e.message) || 'Could not load this case.');
     }

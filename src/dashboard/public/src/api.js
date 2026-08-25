@@ -66,6 +66,18 @@ export const logoutEverywhere = () => post('/api/logout-everywhere');
 
 // --- config / health ---
 export const fetchConfig = () => json('/api/config');
+// Per-run config override -- only reachable on a deployment that mounted
+// CASEY_EXTRA_DASHBOARD_ROUTES (e.g. serpent). A plain casey/uhh deployment
+// has no /api/runs/:id/config route, so this always resolves null there
+// (never throws) -- report-sections.js falls back to the global fetchConfig()
+// result exactly as before. See AGENTS.md's CASEY_EXTRA_DASHBOARD_ROUTES entry.
+export const fetchRunConfig = async (id) => {
+  try {
+    const r = await api('/api/runs/' + encodeURIComponent(id) + '/config');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+};
 export const fetchHealth = () => json('/api/health');
 export const fetchRuntime = () => json('/api/runtime');
 export const fetchFleetHealth = () => json('/api/fleet-health');
