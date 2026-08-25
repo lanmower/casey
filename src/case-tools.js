@@ -791,6 +791,7 @@ function selfCheckLoadBearingToolDescriptions() {
   const byName = Object.fromEntries(tools.map(t => [t.name, t]))
   const required = [
     { tool: 'case_update', field: 'case_type', pattern: /directly and explicitly stated/, name: 'case_type must be agent-stated-only, never inferred' },
+    { tool: REPORT_TOOL_NAME, field: 'location_source', pattern: /Never guess "confirmed"/, name: 'location_source "confirmed" must require the contact actually agreeing, never be guessed' },
     // Config-driven: every report field the active config's report-fields.yml
     // flags never_inferred:true carries its own never_inferred_guard_pattern
     // (a literal substring of that field's own description) that must survive
