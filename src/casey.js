@@ -6,6 +6,7 @@
 //   whatsapp  --  freddie's Meta Graph webhook adapter (real)
 //   discord  --  freddie's adapter + our WS receive (real simulation)
 
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 const pathToFileUrl = (p) => pathToFileURL(p).href
@@ -49,7 +50,19 @@ const CASEY_PLUGINS = path.resolve(__dirname, '..', 'plugins')
 // set by whoever starts the process), pointing at an additional plugin root
 // bootHost discovers alongside casey's own plugins/ -- additive, never a
 // replacement. Absent, behavior is byte-identical to before this existed.
-const CASEY_EXTRA_PLUGINS = process.env.CASEY_EXTRA_PLUGINS_DIR ? path.resolve(process.env.CASEY_EXTRA_PLUGINS_DIR) : null
+// Validated eagerly (unlike freddie's own scanPluginDir, which silently
+// skips a nonexistent root with zero error) so a deployer's typo'd path
+// fails loud at boot -- matching CASEY_CONFIG_DIR's own fail-fast behavior
+// (loadDomainConfig() throws on a missing dir) -- a real defect an
+// independent adversarial review caught: without this check, a mistyped
+// CASEY_EXTRA_PLUGINS_DIR silently registers zero of the deployer's own
+// tools with no signal why.
+const CASEY_EXTRA_PLUGINS = (() => {
+  if (!process.env.CASEY_EXTRA_PLUGINS_DIR) return null
+  const dir = path.resolve(process.env.CASEY_EXTRA_PLUGINS_DIR)
+  if (!fs.existsSync(dir)) throw new Error(`CASEY_EXTRA_PLUGINS_DIR not found: ${dir}`)
+  return dir
+})()
 // freddie's package "exports" map blocks subpath imports, so we reach its
 // platform adapter classes by absolute path under node_modules.
 const FREDDIE_ROOT = path.resolve(__dirname, '..', 'node_modules', 'freddie')
