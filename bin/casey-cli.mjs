@@ -16,7 +16,7 @@ import { rankAttention } from '../src/attn.js'
 import { caseDeliveryTarget } from '../src/hooks/handler.js'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import net from 'node:net'
 import { randomBytes } from 'node:crypto'
 
@@ -519,6 +519,15 @@ async function main() {
 
   if (cmd === 'dashboard') {
     if (flags.help) { console.log('casey dashboard [--port 4000]\n  Start only the observe/edit dashboard against the existing store.'); return }
+    // Same eager-validation discipline as bin/worker.js's own
+    // CASEY_EXTRA_DASHBOARD_ROUTES handling: a mistyped path throws a named
+    // error at boot rather than silently mounting nothing.
+    const extraDashboardRoutes = (() => {
+      if (!process.env.CASEY_EXTRA_DASHBOARD_ROUTES) return null
+      const p = path.resolve(process.env.CASEY_EXTRA_DASHBOARD_ROUTES)
+      if (!existsSync(p)) throw new Error(`CASEY_EXTRA_DASHBOARD_ROUTES not found: ${p}`)
+      return p
+    })()
     const store = createCaseStore(); await store.init()
     const { ensureBootstrapAdmin } = await import('../src/dashboard/auth.js')
     const boot = await ensureBootstrapAdmin(store, console)
@@ -529,6 +538,22 @@ async function main() {
     } catch (e) {
       console.log(bad(`dashboard failed to bind port ${Number(flags.port || 4000)}: ${e.message} - start with --port <other>`))
       await closeAndExit(store, 1)
+    }
+    if (extraDashboardRoutes) {
+      const mod = await import(pathToFileURL(extraDashboardRoutes).href)
+      const mount = mod.default
+      if (typeof mount !== 'function') throw new Error(`CASEY_EXTRA_DASHBOARD_ROUTES module has no default export function: ${extraDashboardRoutes}`)
+      await mount(dash.app, { store })
+      // Same post-mount error-sanitizing safety net as bin/worker.js: a
+      // deployer route mounted after createDashboard resolves sits past
+      // dashboard/server.js's own error middleware (Express error middleware
+      // only catches routes registered before it), so an unguarded throw or
+      // explicit next(err) would otherwise fall through to Express's default
+      // handler and render a stack trace with absolute filesystem paths.
+      dash.app.use((err, req, res, next) => {
+        if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid request body' })
+        res.status(err?.status || 500).json({ error: 'internal error' })
+      })
     }
     console.log(`dashboard: ${cyan(`http://localhost:${dash.port}`)}  ${dim('(ctrl-c to stop)')}`)
     process.on('SIGINT', async () => {
