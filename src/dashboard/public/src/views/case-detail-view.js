@@ -16,6 +16,7 @@ import { toast, failMsg } from '../toasts.js';
 import { CaseHeader } from './case-detail/header.js';
 import { CaseProgress } from './case-detail/progress.js';
 import { ReportSections } from './case-detail/report-sections.js';
+import { ResearchNotesPanel } from './case-detail/research-notes.js';
 import { FieldsEditor } from './case-detail/fields-editor.js';
 import { Transitions } from './case-detail/transitions.js';
 import { ReplyBox } from './case-detail/reply-box.js';
@@ -82,6 +83,7 @@ export function CaseDetailView({ onClose, onOpenCase, key } = {}) {
         CaseHeader({ c, suggestedAssignee: suggested_assignee, onReload: reload, onOpenShare: openShareDialog, onOpenSnooze: openSnoozeDialog }),
         CaseProgress({ status: c.status }),
         ReportSections({ c, events, onSaved: () => reload(id) }),
+        ResearchNotesPanel({ case: c }),
         FieldsEditor({ c, caseTypeSource: case_type_source, onSaved: () => reload(id) }),
         Transitions({ c, transitions, onReload: reload }),
         ReplyBox({ c, events, onReload: reload }),

@@ -78,6 +78,18 @@ export const fetchRunConfig = async (id) => {
     return await r.json();
   } catch { return null; }
 };
+// Per-run research notes -- same degrade discipline as fetchRunConfig above:
+// only reachable on a deployment that mounted CASEY_EXTRA_DASHBOARD_ROUTES
+// (e.g. serpent). Resolves null on a plain casey/uhh deployment (no
+// /api/runs/:id/notes route) or a network failure, never throws --
+// research-notes.js's panel renders nothing in that case.
+export const fetchRunNotes = async (id) => {
+  try {
+    const r = await api('/api/runs/' + encodeURIComponent(id) + '/notes');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+};
 export const fetchHealth = () => json('/api/health');
 export const fetchRuntime = () => json('/api/runtime');
 export const fetchFleetHealth = () => json('/api/fleet-health');
