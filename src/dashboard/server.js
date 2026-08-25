@@ -37,6 +37,7 @@
 import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
 import { VISIT_CRITICAL } from '../case-health.js'
 import { REPORT_KEY_ORDER, UNCLAIMED_ASSIGNEE } from '../case-store.js'
 import { rankAttention } from '../attn.js'
@@ -60,9 +61,29 @@ import {
 } from './auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DESIGN_DIR = path.resolve(__dirname, '..', '..', 'node_modules', 'anentrypoint-design')
-const LEAFLET_DIR = path.resolve(__dirname, '..', '..', 'node_modules', 'leaflet', 'dist')
-const MARKERCLUSTER_DIR = path.resolve(__dirname, '..', '..', 'node_modules', 'leaflet.markercluster', 'dist')
+// Resolved via real Node module resolution, not a hardcoded relative path --
+// a deployer that installs casey as ITS OWN dependency (e.g. serpent) gets
+// these hoisted to the deployer's own node_modules, not nested under
+// casey's, so the old `../../node_modules/<pkg>` assumption 503'd every
+// asset under it (live-witnessed: /design/dist/247420.css, /vendor/leaflet/*,
+// /design/src/bootstrap.js all 404/503'd in a real serpent deployment,
+// silently blanking the whole SPA since bootstrap.js never ran).
+function resolvePackageDir(pkgName, ...subpath) {
+  const entryUrl = import.meta.resolve(pkgName)
+  const entryPath = fileURLToPath(entryUrl)
+  // Walk up from the resolved entry file to the package root (the dir
+  // containing that package's own package.json), then append the subpath --
+  // entryPath is the package's `main`/`exports` target, not its root.
+  let dir = path.dirname(entryPath)
+  while (dir !== path.dirname(dir)) {
+    if (existsSync(path.join(dir, 'package.json'))) break
+    dir = path.dirname(dir)
+  }
+  return path.resolve(dir, ...subpath)
+}
+const DESIGN_DIR = resolvePackageDir('anentrypoint-design')
+const LEAFLET_DIR = resolvePackageDir('leaflet', 'dist')
+const MARKERCLUSTER_DIR = resolvePackageDir('leaflet.markercluster', 'dist')
 const PUBLIC_DIR = path.resolve(__dirname, 'public')
 
 const OPERATOR = { id: 'dashboard-operator', role: 'operator' }
