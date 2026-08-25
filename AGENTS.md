@@ -66,6 +66,39 @@ loaded config; every consumer (`case-store.js`, `case-tools.js`,
 exports rather than reading config directly, so a new consumer never needs
 its own config-parsing logic.
 
+**Two config-resolution models coexist: one-schema-per-process (casey/uhh)
+and one-schema-per-record (serpent).** The models above are casey's default:
+`CASEY_CONFIG_DIR` resolved ONCE at process boot into module-level constants,
+correct for a deployment where every case/ticket/report shares one field
+vocabulary. `report-shape.js` also exports `deriveReportShape(reportFields)`
+-- the same derivation as a pure, standalone function -- so a deployer whose
+domain needs MULTIPLE schemas coexisting in one running process (a different
+field vocabulary per record, not fixed per process) can call it directly
+with a per-record `reportFields` object instead of the module-level default.
+This is purely additive: the module-level exports and every existing
+consumer are unchanged. See `AnEntrypoint/serpent`'s `src/run-schema.js` for
+the reference implementation -- `resolveRunSchema(runRow)` parses a stored
+per-row `schema` JSON blob (same shape as `report-fields.yml`) and calls
+`deriveReportShape()` with it, falling back to a bundled default when unset.
+
+**`CASEY_EXTRA_PLUGINS_DIR`** (deployer-set env var, same discipline as
+`CASEY_CONFIG_DIR` -- never contact-influenced) points `bootHost` at an
+additional plugin root alongside casey's own `plugins/`, so a deployer
+package can register its own tools under the `'cases'` toolset (visible to
+the contact-facing agent's hardcoded, deliberately narrow
+`enabledToolsets:['cases']`) without casey itself knowing anything about
+that domain's tools. Absent, behavior is byte-identical to before this
+existed. **Tool-name collisions across plugin roots are real and silent**:
+freddie's `tools.register()` has documented "second registration wins"
+behavior with no cross-root uniqueness check, so a deployer's own plugin
+must use tool names that don't collide with anything freddie itself or
+casey's own `plugins/case-tools/` bundle -- confirmed the hard way when
+serpent's `research_note`/`research_consolidate` collided with a
+same-named tool freddie's own repo had bundled under a different toolset
+(fixed by removing freddie's bundled tool-registering plugin, keeping only
+the underlying primitive functions importable from freddie's own package
+root for a consumer to wrap under whichever toolset it needs).
+
 **Structural regression guards stay config-aware, not domain-hardcoded.**
 Both `hooks/prompt.js`'s `selfCheckLoadBearingPromptContent` and
 `case-tools.js`'s `selfCheckLoadBearingToolDescriptions` run at module load
