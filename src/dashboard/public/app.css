@@ -838,4 +838,17 @@ html.ds-247420[data-casey-theme="herd-ink"] { background: var(--ink); }
 @media (max-width: 700px) {
   .ds-map-chrome > .ds-map-legend { max-height: 22vh; left: var(--space-2); right: var(--space-2); bottom: var(--space-2); max-width: none; }
   .ds-alert { flex-wrap: wrap; }
+  .ds-247420 .ds-appbar .btn,
+  .ds-247420 .ds-appbar .btn-primary,
+  .ds-247420 .ds-appbar .btn-ghost,
+  .ds-247420 .ds-appbar .ds-attn-lead,
+  .ds-247420 .ds-appbar .ds-icon-btn,
+  .ds-247420 .ds-appbar .ds-dropdown-trigger { min-height: 2.75rem; }
+  .ds-handoff-banner .ds-alert-warn { padding: var(--space-2); }
+  .ds-handoff-open > * {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
