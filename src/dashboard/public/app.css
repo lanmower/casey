@@ -843,7 +843,7 @@ html.ds-247420[data-casey-theme="herd-ink"] { background: var(--ink); }
   .ds-247420 .ds-appbar .btn-ghost,
   .ds-247420 .ds-appbar .ds-attn-lead,
   .ds-247420 .ds-appbar .ds-icon-btn,
-  .ds-247420 .ds-appbar .ds-dropdown-trigger { min-height: 2.75rem; }
+  .ds-247420 .ds-appbar .ds-dropdown-trigger { padding: var(--space-hair) var(--space-1); gap: 0; }
   .ds-handoff-banner .ds-alert-warn { padding: var(--space-2); }
   .ds-handoff-open > * {
     display: -webkit-box;
